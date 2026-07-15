@@ -1,7 +1,7 @@
 import gtbMenuQr from "../assets/gtb-menu-qr.png";
 
 const menuUrl =
-  "https://gtb-auto-detailing-pos.vercel.app/menu";
+  "https://gtbautodetailingpos.pages.dev/menu";
 
 function CustomerQR() {
   async function copyMenuLink() {
