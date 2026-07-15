@@ -6,6 +6,7 @@ import {
   BarChart,
   CartesianGrid,
   ResponsiveContainer,
+  Line,
   Tooltip,
   XAxis,
   YAxis,
@@ -37,6 +38,7 @@ type ChartPoint = {
   fullDate: string;
   revenue: number;
   orders: number;
+  movingAverage: number;
 };
 
 function Dashboard() {
@@ -456,7 +458,27 @@ function Dashboard() {
             subtitle={highestDay?.fullDate ?? "暂无数据"}
           />
         </div>
+<div style={chartLegend}>
+  <span style={legendItem}>
+    <span
+      style={{
+        ...legendLine,
+        background: chartColor,
+      }}
+    />
+    每日营业额
+  </span>
 
+  <span style={legendItem}>
+    <span
+      style={{
+        ...legendLine,
+        background: "#f59e0b",
+      }}
+    />
+    7日平均线
+  </span>
+</div>
         <div style={chartContainer}>
           <ResponsiveContainer
             width="100%"
@@ -545,6 +567,19 @@ function Dashboard() {
                   strokeWidth: 3,
                 }}
               />
+              <Line
+  type="monotone"
+  dataKey="movingAverage"
+  stroke="#f59e0b"
+  strokeWidth={2.5}
+  dot={false}
+  activeDot={{
+    r: 5,
+    fill: "#f59e0b",
+    stroke: "#ffffff",
+    strokeWidth: 2,
+  }}
+/>
             </AreaChart>
           </ResponsiveContainer>
         </div>
@@ -1063,6 +1098,7 @@ function buildChartData(
     }
 
     const key = getDateKey(orderDate);
+
     const existing = dataMap.get(key) || {
       revenue: 0,
       orders: 0,
@@ -1087,14 +1123,35 @@ function buildChartData(
       fullDate: formatFullDate(date),
       revenue: value?.revenue ?? 0,
       orders: value?.orders ?? 0,
+      movingAverage: 0,
     });
 
     date = addDays(date, 1);
   }
 
-  return chartData;
-}
+  return chartData.map((item, index, allItems) => {
+    const startIndex = Math.max(0, index - 6);
 
+    const averageItems = allItems.slice(
+      startIndex,
+      index + 1
+    );
+
+    const totalRevenue = averageItems.reduce(
+      (sum, current) =>
+        sum + current.revenue,
+      0
+    );
+
+    return {
+      ...item,
+      movingAverage:
+        averageItems.length > 0
+          ? totalRevenue / averageItems.length
+          : 0,
+    };
+  });
+}
 function sumOrdersWithinPeriod(
   orders: DashboardOrder[],
   start: Date,
@@ -1126,7 +1183,6 @@ function sumOrderTotal(
     0
   );
 }
-
 function isRevenueOrder(
   order: DashboardOrder
 ) {
@@ -1331,7 +1387,28 @@ const statCardTop = {
   justifyContent: "space-between",
   gap: 10,
 };
+const chartLegend = {
+  marginTop: 20,
+  display: "flex",
+  flexWrap: "wrap" as const,
+  gap: 18,
+  color: "#6b7280",
+  fontSize: 13,
+  fontWeight: 700,
+};
 
+const legendItem = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 7,
+};
+
+const legendLine = {
+  display: "inline-block",
+  width: 24,
+  height: 3,
+  borderRadius: 999,
+};
 const chartCard = {
   marginTop: 20,
   padding: 24,
