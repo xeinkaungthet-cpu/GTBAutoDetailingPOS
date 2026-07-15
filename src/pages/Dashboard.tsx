@@ -1,58 +1,235 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { supabase } from "../lib/supabase";
 
+type RangeType = "7d" | "30d" | "month";
+
+type DashboardOrder = {
+  id: number | string;
+  order_no?: string | null;
+  member_id?: number | string | null;
+  vehicle_id?: number | string | null;
+  status?: string | null;
+  total?: number | string | null;
+  created_at: string;
+};
+
+type OrderItem = {
+  quantity?: number | string | null;
+  services?: {
+    service_name?: string | null;
+  } | null;
+};
+
+type ChartPoint = {
+  date: string;
+  fullDate: string;
+  revenue: number;
+  orders: number;
+};
+
 function Dashboard() {
-  const [orders, setOrders] = useState<any[]>([]);
+  const [orders, setOrders] = useState<DashboardOrder[]>([]);
   const [members, setMembers] = useState<any[]>([]);
   const [vehicles, setVehicles] = useState<any[]>([]);
-  const [items, setItems] = useState<any[]>([]);
+  const [items, setItems] = useState<OrderItem[]>([]);
+  const [range, setRange] = useState<RangeType>("7d");
+  const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
 
   async function loadDashboard() {
-    const { data: ordersData } = await supabase
-      .from("orders")
-      .select("*")
-      .order("id", { ascending: false });
+    setLoading(true);
+    setErrorMessage("");
 
-    const { data: membersData } = await supabase.from("members").select("*");
-    const { data: vehiclesData } = await supabase.from("vehicles").select("*");
+    const [
+      ordersResult,
+      membersResult,
+      vehiclesResult,
+      itemsResult,
+    ] = await Promise.all([
+      supabase
+        .from("orders")
+        .select("*")
+        .order("created_at", { ascending: false }),
 
-    const { data: itemsData } = await supabase
-      .from("order_items")
-      .select("*, services(*)");
+      supabase.from("members").select("*"),
 
-    if (ordersData) setOrders(ordersData);
-    if (membersData) setMembers(membersData);
-    if (vehiclesData) setVehicles(vehiclesData);
-    if (itemsData) setItems(itemsData);
+      supabase.from("vehicles").select("*"),
+
+      supabase
+        .from("order_items")
+        .select("*, services(*)"),
+    ]);
+
+    const firstError =
+      ordersResult.error ||
+      membersResult.error ||
+      vehiclesResult.error ||
+      itemsResult.error;
+
+    if (firstError) {
+      console.error(firstError);
+      setErrorMessage(firstError.message);
+    }
+
+    setOrders(
+      (ordersResult.data as DashboardOrder[] | null) ?? []
+    );
+
+    setMembers(membersResult.data ?? []);
+    setVehicles(vehiclesResult.data ?? []);
+
+    setItems(
+      (itemsResult.data as OrderItem[] | null) ?? []
+    );
+
+    setLoading(false);
   }
 
   useEffect(() => {
     loadDashboard();
   }, []);
 
-  const today = new Date().toDateString();
-
-  const todayOrders = orders.filter(
-    (order) => new Date(order.created_at).toDateString() === today
+  const revenueOrders = useMemo(
+    () => orders.filter(isRevenueOrder),
+    [orders]
   );
 
-  const todaySales = todayOrders.reduce(
-    (sum, order) => sum + Number(order.total || 0),
-    0
+  const todayStart = startOfDay(new Date());
+  const tomorrowStart = addDays(todayStart, 1);
+  const yesterdayStart = addDays(todayStart, -1);
+
+  const todayOrders = revenueOrders.filter((order) =>
+    isDateBetween(
+      order.created_at,
+      todayStart,
+      tomorrowStart
+    )
   );
 
-  const monthSales = orders.reduce(
-    (sum, order) => sum + Number(order.total || 0),
-    0
+  const yesterdayOrders = revenueOrders.filter((order) =>
+    isDateBetween(
+      order.created_at,
+      yesterdayStart,
+      todayStart
+    )
   );
 
-  const avgOrder = orders.length > 0 ? monthSales / orders.length : 0;
+  const todaySales = sumOrderTotal(todayOrders);
+  const yesterdaySales = sumOrderTotal(yesterdayOrders);
+
+  const todayChange = calculateChange(
+    todaySales,
+    yesterdaySales
+  );
+
+  const monthStart = new Date(
+    todayStart.getFullYear(),
+    todayStart.getMonth(),
+    1
+  );
+
+  const monthOrders = revenueOrders.filter((order) =>
+    isDateBetween(
+      order.created_at,
+      monthStart,
+      tomorrowStart
+    )
+  );
+
+  const monthSales = sumOrderTotal(monthOrders);
+
+  const avgOrder =
+    monthOrders.length > 0
+      ? monthSales / monthOrders.length
+      : 0;
+
+  const period = useMemo(
+    () => getPeriod(range),
+    [range]
+  );
+
+  const chartData = useMemo(
+    () =>
+      buildChartData(
+        revenueOrders,
+        period.currentStart,
+        period.currentEnd
+      ),
+    [
+      revenueOrders,
+      period.currentStart,
+      period.currentEnd,
+    ]
+  );
+
+  const periodSales = useMemo(
+    () => chartData.reduce(
+      (sum, item) => sum + item.revenue,
+      0
+    ),
+    [chartData]
+  );
+
+  const previousPeriodSales = useMemo(
+    () =>
+      sumOrdersWithinPeriod(
+        revenueOrders,
+        period.previousStart,
+        period.previousEnd
+      ),
+    [
+      revenueOrders,
+      period.previousStart,
+      period.previousEnd,
+    ]
+  );
+
+  const periodChange = calculateChange(
+    periodSales,
+    previousPeriodSales
+  );
+
+  const chartColor =
+    periodChange === null || periodChange === 0
+      ? "#2563eb"
+      : periodChange > 0
+        ? "#16a34a"
+        : "#dc2626";
+
+  const highestDay = chartData.reduce<ChartPoint | null>(
+    (highest, item) => {
+      if (!highest || item.revenue > highest.revenue) {
+        return item;
+      }
+
+      return highest;
+    },
+    null
+  );
+
+  const averageDailySales =
+    chartData.length > 0
+      ? periodSales / chartData.length
+      : 0;
 
   const serviceCount: Record<string, number> = {};
 
   items.forEach((item) => {
-    const name = item.services?.service_name || "未知服务";
-    serviceCount[name] = (serviceCount[name] || 0) + Number(item.quantity || 1);
+    const name =
+      item.services?.service_name || "未知服务";
+
+    serviceCount[name] =
+      (serviceCount[name] || 0) +
+      Number(item.quantity || 1);
   });
 
   const topServices = Object.entries(serviceCount)
@@ -61,24 +238,109 @@ function Dashboard() {
 
   return (
     <>
-      <div style={header}>
+      <style>
+        {`
+          @media (max-width: 1100px) {
+            .dashboard-grid-four {
+              grid-template-columns:
+                repeat(2, minmax(0, 1fr)) !important;
+            }
+
+            .dashboard-section-grid {
+              grid-template-columns:
+                1fr !important;
+            }
+          }
+
+          @media (max-width: 720px) {
+            .dashboard-header {
+              align-items: flex-start !important;
+              flex-direction: column !important;
+              gap: 14px !important;
+            }
+
+            .dashboard-grid-four,
+            .dashboard-grid-two {
+              grid-template-columns:
+                1fr !important;
+            }
+
+            .revenue-chart-header {
+              align-items: flex-start !important;
+              flex-direction: column !important;
+            }
+
+            .revenue-market-row {
+              align-items: flex-start !important;
+              flex-direction: column !important;
+            }
+
+            .revenue-chart-stats {
+              grid-template-columns:
+                1fr !important;
+            }
+          }
+        `}
+      </style>
+
+      <div
+        style={header}
+        className="dashboard-header"
+      >
         <div>
-          <h1 style={{ margin: 0 }}>Dashboard</h1>
-          <p style={{ color: "#6b7280", marginTop: 6 }}>
+          <h1 style={{ margin: 0 }}>
+            Dashboard
+          </h1>
+
+          <p
+            style={{
+              color: "#6b7280",
+              marginTop: 6,
+            }}
+          >
             GTB Auto Detailing POS 营业总览
           </p>
         </div>
 
-        <div style={aiBox}>🤖 AI Assistant Ready</div>
+        <div style={headerActions}>
+          <button
+            type="button"
+            onClick={loadDashboard}
+            style={refreshButton}
+          >
+            ↻ 刷新数据
+          </button>
+
+          <div style={aiBox}>
+            🤖 AI Assistant Ready
+          </div>
+        </div>
       </div>
 
-      <div style={grid4}>
+      {errorMessage && (
+        <div style={errorBox}>
+          数据加载失败：{errorMessage}
+        </div>
+      )}
+
+      {loading && (
+        <div style={loadingBox}>
+          正在加载营业数据……
+        </div>
+      )}
+
+      <div
+        style={grid4}
+        className="dashboard-grid-four"
+      >
         <StatCard
           title="今日营业额"
-          value={`$${todaySales.toFixed(2)}`}
+          value={formatMoney(todaySales)}
           icon="💰"
           bg="#dcfce7"
           border="#16a34a"
+          trend={todayChange}
+          trendLabel="较昨日"
         />
 
         <StatCard
@@ -106,69 +368,301 @@ function Dashboard() {
         />
       </div>
 
-      <div style={grid2}>
+      <section style={chartCard}>
+        <div
+          style={chartHeader}
+          className="revenue-chart-header"
+        >
+          <div>
+            <p style={chartEyebrow}>
+              REVENUE MARKET
+            </p>
+
+            <h2 style={chartTitle}>
+              营业额走势
+            </h2>
+
+            <p style={chartDescription}>
+              根据 Supabase 真实订单自动统计
+            </p>
+          </div>
+
+          <div style={rangeTabs}>
+            <RangeButton
+              active={range === "7d"}
+              onClick={() => setRange("7d")}
+            >
+              7天
+            </RangeButton>
+
+            <RangeButton
+              active={range === "30d"}
+              onClick={() => setRange("30d")}
+            >
+              30天
+            </RangeButton>
+
+            <RangeButton
+              active={range === "month"}
+              onClick={() => setRange("month")}
+            >
+              本月
+            </RangeButton>
+          </div>
+        </div>
+
+        <div
+          style={marketRow}
+          className="revenue-market-row"
+        >
+          <div>
+            <p style={marketLabel}>
+              {period.label}营业额
+            </p>
+
+            <div style={marketValue}>
+              {formatMoney(periodSales)}
+            </div>
+          </div>
+
+          <TrendBadge
+            change={periodChange}
+            label="较上一周期"
+          />
+        </div>
+
+        <div
+          style={chartStats}
+          className="revenue-chart-stats"
+        >
+          <ChartStat
+            title="上一周期"
+            value={formatMoney(previousPeriodSales)}
+          />
+
+          <ChartStat
+            title="日均营业额"
+            value={formatMoney(averageDailySales)}
+          />
+
+          <ChartStat
+            title="最高单日"
+            value={formatMoney(
+              highestDay?.revenue ?? 0
+            )}
+            subtitle={highestDay?.fullDate ?? "暂无数据"}
+          />
+        </div>
+
+        <div style={chartContainer}>
+          <ResponsiveContainer
+            width="100%"
+            height="100%"
+          >
+            <AreaChart
+              data={chartData}
+              margin={{
+                top: 20,
+                right: 18,
+                left: 4,
+                bottom: 6,
+              }}
+            >
+              <defs>
+                <linearGradient
+                  id="revenueGradient"
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2="1"
+                >
+                  <stop
+                    offset="5%"
+                    stopColor={chartColor}
+                    stopOpacity={0.35}
+                  />
+
+                  <stop
+                    offset="95%"
+                    stopColor={chartColor}
+                    stopOpacity={0.02}
+                  />
+                </linearGradient>
+              </defs>
+
+              <CartesianGrid
+                strokeDasharray="4 4"
+                vertical={false}
+                stroke="#e5e7eb"
+              />
+
+              <XAxis
+                dataKey="date"
+                tickLine={false}
+                axisLine={false}
+                tick={{
+                  fill: "#6b7280",
+                  fontSize: 12,
+                }}
+                interval={
+                  range === "7d"
+                    ? 0
+                    : "preserveStartEnd"
+                }
+              />
+
+              <YAxis
+                tickLine={false}
+                axisLine={false}
+                tick={{
+                  fill: "#6b7280",
+                  fontSize: 12,
+                }}
+                tickFormatter={formatCompactMoney}
+              />
+
+              <Tooltip
+                content={<RevenueTooltip />}
+                cursor={{
+                  stroke: chartColor,
+                  strokeDasharray: "5 5",
+                }}
+              />
+
+              <Area
+                type="monotone"
+                dataKey="revenue"
+                stroke={chartColor}
+                strokeWidth={3}
+                fill="url(#revenueGradient)"
+                activeDot={{
+                  r: 6,
+                  fill: chartColor,
+                  stroke: "#ffffff",
+                  strokeWidth: 3,
+                }}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </section>
+
+      <div
+        style={grid2}
+        className="dashboard-grid-two"
+      >
         <StatCard
           title="本月营业额"
-          value={`$${monthSales.toFixed(2)}`}
+          value={formatMoney(monthSales)}
           icon="📈"
           bg="#fef9c3"
           border="#ca8a04"
         />
 
         <StatCard
-          title="平均客单价"
-          value={`$${avgOrder.toFixed(2)}`}
+          title="本月平均客单价"
+          value={formatMoney(avgOrder)}
           icon="📊"
           bg="#e0f2fe"
           border="#0284c7"
         />
       </div>
 
-      <div style={sectionGrid}>
+      <div
+        style={sectionGrid}
+        className="dashboard-section-grid"
+      >
         <div style={card}>
           <h2>最近订单</h2>
 
           {orders.slice(0, 5).map((order) => (
-            <div key={order.id} style={orderRow}>
+            <div
+              key={order.id}
+              style={orderRow}
+            >
               <div>
-                <strong>{order.order_no}</strong>
-                <p style={{ margin: "6px 0 0", color: "#6b7280" }}>
-                  会员ID：{order.member_id} · 车辆ID：{order.vehicle_id}
+                <strong>
+                  {order.order_no ||
+                    `ORDER-${order.id}`}
+                </strong>
+
+                <p
+                  style={{
+                    margin: "6px 0 0",
+                    color: "#6b7280",
+                  }}
+                >
+                  会员ID：
+                  {order.member_id ?? "—"} · 车辆ID：
+                  {order.vehicle_id ?? "—"}
                 </p>
               </div>
 
-              <div style={{ textAlign: "right" }}>
-                <span style={badge}>{order.status}</span>
-                <h3 style={{ margin: "8px 0 0" }}>
-                  ${Number(order.total).toFixed(2)}
+              <div
+                style={{
+                  textAlign: "right",
+                }}
+              >
+                <span style={badge}>
+                  {order.status || "pending"}
+                </span>
+
+                <h3
+                  style={{
+                    margin: "8px 0 0",
+                  }}
+                >
+                  {formatMoney(
+                    Number(order.total || 0)
+                  )}
                 </h3>
               </div>
             </div>
           ))}
 
-          {orders.length === 0 && <p>暂无订单</p>}
+          {orders.length === 0 && (
+            <p>暂无订单</p>
+          )}
         </div>
 
         <div style={card}>
           <h2>热门服务</h2>
 
-          {topServices.map(([name, count], index) => (
-            <div key={name} style={serviceRow}>
-              <span>
-                {index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : "⭐"}{" "}
-                {name}
-              </span>
-              <strong>{count} 次</strong>
-            </div>
-          ))}
+          {topServices.map(
+            ([name, count], index) => (
+              <div
+                key={name}
+                style={serviceRow}
+              >
+                <span>
+                  {index === 0
+                    ? "🥇"
+                    : index === 1
+                      ? "🥈"
+                      : index === 2
+                        ? "🥉"
+                        : "⭐"}{" "}
+                  {name}
+                </span>
 
-          {topServices.length === 0 && <p>暂无数据</p>}
+                <strong>{count} 次</strong>
+              </div>
+            )
+          )}
+
+          {topServices.length === 0 && (
+            <p>暂无数据</p>
+          )}
         </div>
       </div>
 
       <div style={aiPanel}>
         <h2>🤖 AI 店长提醒</h2>
-        <p>今日营业数据已准备好。后续这里会自动显示：</p>
+
+        <p>
+          今日营业数据已准备好。后续这里会自动显示：
+        </p>
+
         <ul>
           <li>每日营业额分析</li>
           <li>热门服务建议</li>
@@ -186,12 +680,16 @@ function StatCard({
   icon,
   bg,
   border,
+  trend,
+  trendLabel,
 }: {
   title: string;
   value: string;
   icon: string;
   bg: string;
   border: string;
+  trend?: number | null;
+  trendLabel?: string;
 }) {
   return (
     <div
@@ -201,11 +699,444 @@ function StatCard({
         borderLeft: `6px solid ${border}`,
       }}
     >
-      <div style={{ fontSize: 34 }}>{icon}</div>
-      <p style={{ margin: "10px 0 0", color: "#374151" }}>{title}</p>
-      <h1 style={{ margin: "8px 0 0", fontSize: 34 }}>{value}</h1>
+      <div style={statCardTop}>
+        <div style={{ fontSize: 34 }}>
+          {icon}
+        </div>
+
+        {trend !== undefined && (
+          <TrendBadge
+            change={trend}
+            label={trendLabel || ""}
+            compact
+          />
+        )}
+      </div>
+
+      <p
+        style={{
+          margin: "10px 0 0",
+          color: "#374151",
+        }}
+      >
+        {title}
+      </p>
+
+      <h1
+        style={{
+          margin: "8px 0 0",
+          fontSize: 34,
+        }}
+      >
+        {value}
+      </h1>
     </div>
   );
+}
+
+function RangeButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        ...rangeButton,
+        background: active
+          ? "#111827"
+          : "transparent",
+        color: active
+          ? "#ffffff"
+          : "#6b7280",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function TrendBadge({
+  change,
+  label,
+  compact = false,
+}: {
+  change: number | null;
+  label: string;
+  compact?: boolean;
+}) {
+  if (change === null) {
+    return (
+      <div
+        style={{
+          ...trendBadge,
+          padding: compact
+            ? "5px 8px"
+            : "8px 12px",
+          background: "#dbeafe",
+          color: "#1d4ed8",
+        }}
+      >
+        ● 新增
+        {!compact && ` · ${label}为 $0`}
+      </div>
+    );
+  }
+
+  const positive = change > 0;
+  const negative = change < 0;
+
+  const background = positive
+    ? "#dcfce7"
+    : negative
+      ? "#fee2e2"
+      : "#f3f4f6";
+
+  const color = positive
+    ? "#166534"
+    : negative
+      ? "#991b1b"
+      : "#4b5563";
+
+  const icon = positive
+    ? "▲"
+    : negative
+      ? "▼"
+      : "—";
+
+  return (
+    <div
+      style={{
+        ...trendBadge,
+        padding: compact
+          ? "5px 8px"
+          : "8px 12px",
+        background,
+        color,
+      }}
+    >
+      {icon} {Math.abs(change).toFixed(1)}%
+      {!compact && ` · ${label}`}
+    </div>
+  );
+}
+
+function ChartStat({
+  title,
+  value,
+  subtitle,
+}: {
+  title: string;
+  value: string;
+  subtitle?: string;
+}) {
+  return (
+    <div style={chartStatCard}>
+      <p style={chartStatTitle}>
+        {title}
+      </p>
+
+      <strong style={chartStatValue}>
+        {value}
+      </strong>
+
+      {subtitle && (
+        <p style={chartStatSubtitle}>
+          {subtitle}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function RevenueTooltip({
+  active,
+  payload,
+}: any) {
+  if (!active || !payload?.length) {
+    return null;
+  }
+
+  const point = payload[0].payload as ChartPoint;
+
+  return (
+    <div style={tooltipBox}>
+      <p style={tooltipDate}>
+        {point.fullDate}
+      </p>
+
+      <strong style={tooltipValue}>
+        {formatMoney(point.revenue)}
+      </strong>
+
+      <p style={tooltipOrders}>
+        {point.orders} 单订单
+      </p>
+    </div>
+  );
+}
+
+function getPeriod(range: RangeType) {
+  const currentEnd = startOfDay(new Date());
+
+  let currentStart: Date;
+  let label: string;
+
+  if (range === "30d") {
+    currentStart = addDays(currentEnd, -29);
+    label = "近30天";
+  } else if (range === "month") {
+    currentStart = new Date(
+      currentEnd.getFullYear(),
+      currentEnd.getMonth(),
+      1
+    );
+    label = "本月";
+  } else {
+    currentStart = addDays(currentEnd, -6);
+    label = "近7天";
+  }
+
+  const numberOfDays =
+    differenceInDays(
+      currentStart,
+      currentEnd
+    ) + 1;
+
+  const previousEnd = addDays(
+    currentStart,
+    -1
+  );
+
+  const previousStart = addDays(
+    previousEnd,
+    -(numberOfDays - 1)
+  );
+
+  return {
+    label,
+    currentStart,
+    currentEnd,
+    previousStart,
+    previousEnd,
+  };
+}
+
+function buildChartData(
+  orders: DashboardOrder[],
+  start: Date,
+  end: Date
+): ChartPoint[] {
+  const dataMap = new Map<
+    string,
+    {
+      revenue: number;
+      orders: number;
+    }
+  >();
+
+  orders.forEach((order) => {
+    const orderDate = new Date(order.created_at);
+
+    if (
+      Number.isNaN(orderDate.getTime()) ||
+      orderDate < start ||
+      orderDate >= addDays(end, 1)
+    ) {
+      return;
+    }
+
+    const key = getDateKey(orderDate);
+    const existing = dataMap.get(key) || {
+      revenue: 0,
+      orders: 0,
+    };
+
+    existing.revenue += Number(order.total || 0);
+    existing.orders += 1;
+
+    dataMap.set(key, existing);
+  });
+
+  const chartData: ChartPoint[] = [];
+
+  let date = new Date(start);
+
+  while (date <= end) {
+    const key = getDateKey(date);
+    const value = dataMap.get(key);
+
+    chartData.push({
+      date: formatShortDate(date),
+      fullDate: formatFullDate(date),
+      revenue: value?.revenue ?? 0,
+      orders: value?.orders ?? 0,
+    });
+
+    date = addDays(date, 1);
+  }
+
+  return chartData;
+}
+
+function sumOrdersWithinPeriod(
+  orders: DashboardOrder[],
+  start: Date,
+  end: Date
+) {
+  const endExclusive = addDays(end, 1);
+
+  return orders
+    .filter((order) =>
+      isDateBetween(
+        order.created_at,
+        start,
+        endExclusive
+      )
+    )
+    .reduce(
+      (sum, order) =>
+        sum + Number(order.total || 0),
+      0
+    );
+}
+
+function sumOrderTotal(
+  orders: DashboardOrder[]
+) {
+  return orders.reduce(
+    (sum, order) =>
+      sum + Number(order.total || 0),
+    0
+  );
+}
+
+function isRevenueOrder(
+  order: DashboardOrder
+) {
+  const status = String(
+    order.status || ""
+  )
+    .trim()
+    .toLowerCase();
+
+  const excludedStatuses = [
+    "cancelled",
+    "canceled",
+    "refunded",
+    "void",
+    "已取消",
+    "取消",
+    "退款",
+  ];
+
+  return !excludedStatuses.includes(status);
+}
+
+function isDateBetween(
+  dateValue: string,
+  start: Date,
+  endExclusive: Date
+) {
+  const date = new Date(dateValue);
+
+  return (
+    !Number.isNaN(date.getTime()) &&
+    date >= start &&
+    date < endExclusive
+  );
+}
+
+function calculateChange(
+  current: number,
+  previous: number
+): number | null {
+  if (previous === 0) {
+    return current === 0 ? 0 : null;
+  }
+
+  return (
+    ((current - previous) / previous) * 100
+  );
+}
+
+function startOfDay(date: Date) {
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate()
+  );
+}
+
+function addDays(
+  date: Date,
+  days: number
+) {
+  const result = new Date(date);
+
+  result.setDate(result.getDate() + days);
+
+  return result;
+}
+
+function differenceInDays(
+  start: Date,
+  end: Date
+) {
+  const millisecondsPerDay =
+    24 * 60 * 60 * 1000;
+
+  return Math.round(
+    (startOfDay(end).getTime() -
+      startOfDay(start).getTime()) /
+      millisecondsPerDay
+  );
+}
+
+function getDateKey(date: Date) {
+  const year = date.getFullYear();
+
+  const month = String(
+    date.getMonth() + 1
+  ).padStart(2, "0");
+
+  const day = String(
+    date.getDate()
+  ).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function formatShortDate(date: Date) {
+  return `${date.getMonth() + 1}/${date.getDate()}`;
+}
+
+function formatFullDate(date: Date) {
+  return `${date.getFullYear()}年${
+    date.getMonth() + 1
+  }月${date.getDate()}日`;
+}
+
+function formatMoney(value: number) {
+  return `$${Number(value || 0).toFixed(2)}`;
+}
+
+function formatCompactMoney(value: number) {
+  if (value >= 1000000) {
+    return `$${(value / 1000000).toFixed(1)}M`;
+  }
+
+  if (value >= 1000) {
+    return `$${(value / 1000).toFixed(1)}K`;
+  }
+
+  return `$${Number(value).toFixed(0)}`;
 }
 
 const header = {
@@ -215,22 +1146,57 @@ const header = {
   marginBottom: 24,
 };
 
+const headerActions = {
+  display: "flex",
+  alignItems: "center",
+  flexWrap: "wrap" as const,
+  gap: 10,
+};
+
 const aiBox = {
   background: "#111827",
-  color: "#fff",
+  color: "#ffffff",
   padding: "12px 18px",
   borderRadius: 999,
 };
 
+const refreshButton = {
+  padding: "11px 16px",
+  border: "1px solid #d1d5db",
+  background: "#ffffff",
+  color: "#111827",
+  borderRadius: 999,
+  cursor: "pointer",
+  fontWeight: 700,
+};
+
+const loadingBox = {
+  marginBottom: 18,
+  padding: 14,
+  background: "#eff6ff",
+  color: "#1d4ed8",
+  borderRadius: 12,
+};
+
+const errorBox = {
+  marginBottom: 18,
+  padding: 14,
+  background: "#fee2e2",
+  color: "#991b1b",
+  borderRadius: 12,
+};
+
 const grid4 = {
   display: "grid",
-  gridTemplateColumns: "repeat(4, 1fr)",
+  gridTemplateColumns:
+    "repeat(4, minmax(0, 1fr))",
   gap: 20,
 };
 
 const grid2 = {
   display: "grid",
-  gridTemplateColumns: "repeat(2, 1fr)",
+  gridTemplateColumns:
+    "repeat(2, minmax(0, 1fr))",
   gap: 20,
   marginTop: 20,
 };
@@ -245,14 +1211,175 @@ const sectionGrid = {
 const statCard = {
   padding: 22,
   borderRadius: 16,
-  boxShadow: "0 10px 25px rgba(0,0,0,.08)",
+  boxShadow:
+    "0 10px 25px rgba(0,0,0,.08)",
+};
+
+const statCardTop = {
+  display: "flex",
+  alignItems: "flex-start",
+  justifyContent: "space-between",
+  gap: 10,
+};
+
+const chartCard = {
+  marginTop: 20,
+  padding: 24,
+  background: "#ffffff",
+  border: "1px solid #e5e7eb",
+  borderRadius: 20,
+  boxShadow:
+    "0 14px 35px rgba(15,23,42,.08)",
+};
+
+const chartHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 18,
+};
+
+const chartEyebrow = {
+  margin: "0 0 5px",
+  color: "#2563eb",
+  fontWeight: 900,
+  fontSize: 12,
+  letterSpacing: "1.4px",
+};
+
+const chartTitle = {
+  margin: 0,
+  color: "#111827",
+  fontSize: 26,
+};
+
+const chartDescription = {
+  margin: "7px 0 0",
+  color: "#6b7280",
+};
+
+const rangeTabs = {
+  display: "inline-flex",
+  padding: 4,
+  background: "#f3f4f6",
+  borderRadius: 12,
+  gap: 4,
+};
+
+const rangeButton = {
+  minWidth: 64,
+  padding: "9px 13px",
+  border: "none",
+  borderRadius: 9,
+  cursor: "pointer",
+  fontWeight: 800,
+};
+
+const marketRow = {
+  marginTop: 25,
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-end",
+  gap: 18,
+};
+
+const marketLabel = {
+  margin: 0,
+  color: "#6b7280",
+  fontWeight: 700,
+};
+
+const marketValue = {
+  marginTop: 4,
+  color: "#111827",
+  fontSize: 42,
+  fontWeight: 900,
+  letterSpacing: "-1.5px",
+};
+
+const trendBadge = {
+  display: "inline-flex",
+  alignItems: "center",
+  borderRadius: 999,
+  fontSize: 13,
+  fontWeight: 900,
+  whiteSpace: "nowrap" as const,
+};
+
+const chartStats = {
+  marginTop: 22,
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(3, minmax(0, 1fr))",
+  gap: 12,
+};
+
+const chartStatCard = {
+  padding: 15,
+  background: "#f9fafb",
+  border: "1px solid #e5e7eb",
+  borderRadius: 14,
+};
+
+const chartStatTitle = {
+  margin: 0,
+  color: "#6b7280",
+  fontSize: 13,
+};
+
+const chartStatValue = {
+  display: "block",
+  marginTop: 6,
+  color: "#111827",
+  fontSize: 20,
+};
+
+const chartStatSubtitle = {
+  margin: "5px 0 0",
+  color: "#9ca3af",
+  fontSize: 12,
+};
+
+const chartContainer = {
+  width: "100%",
+  height: 360,
+  marginTop: 22,
+};
+
+const tooltipBox = {
+  minWidth: 150,
+  padding: "13px 15px",
+  background: "rgba(17,24,39,.96)",
+  color: "#ffffff",
+  borderRadius: 12,
+  boxShadow:
+    "0 12px 28px rgba(0,0,0,.22)",
+};
+
+const tooltipDate = {
+  margin: 0,
+  color: "#d1d5db",
+  fontSize: 12,
+};
+
+const tooltipValue = {
+  display: "block",
+  marginTop: 6,
+  fontSize: 22,
+};
+
+const tooltipOrders = {
+  margin: "5px 0 0",
+  color: "#9ca3af",
+  fontSize: 12,
 };
 
 const card = {
-  background: "#fff",
+  background: "#ffffff",
   padding: 22,
   borderRadius: 16,
-  boxShadow: "0 10px 25px rgba(0,0,0,.08)",
+  boxShadow:
+    "0 10px 25px rgba(0,0,0,.08)",
 };
 
 const orderRow = {
@@ -281,8 +1408,9 @@ const badge = {
 
 const aiPanel = {
   marginTop: 20,
-  background: "linear-gradient(135deg, #111827, #2563eb)",
-  color: "#fff",
+  background:
+    "linear-gradient(135deg, #111827, #2563eb)",
+  color: "#ffffff",
   padding: 24,
   borderRadius: 18,
 };
