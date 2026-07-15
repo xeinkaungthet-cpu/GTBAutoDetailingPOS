@@ -2,12 +2,15 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Area,
   AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
+
 import { supabase } from "../lib/supabase";
 
 type RangeType = "7d" | "30d" | "month";
@@ -545,6 +548,88 @@ function Dashboard() {
             </AreaChart>
           </ResponsiveContainer>
         </div>
+              <div style={volumeHeader}>
+          <div>
+            <p style={volumeEyebrow}>
+              ORDER VOLUME
+            </p>
+
+            <h3 style={volumeTitle}>
+              订单量 / 成交量
+            </h3>
+          </div>
+
+          <strong style={volumeTotal}>
+            {chartData.reduce(
+              (sum, item) => sum + item.orders,
+              0
+            )}{" "}
+            单
+          </strong>
+        </div>
+
+        <div style={volumeChartContainer}>
+          <ResponsiveContainer
+            width="100%"
+            height="100%"
+          >
+            <BarChart
+              data={chartData}
+              margin={{
+                top: 10,
+                right: 18,
+                left: 4,
+                bottom: 0,
+              }}
+            >
+              <CartesianGrid
+                strokeDasharray="4 4"
+                vertical={false}
+                stroke="#f3f4f6"
+              />
+
+              <XAxis
+                dataKey="date"
+                tickLine={false}
+                axisLine={false}
+                tick={{
+                  fill: "#9ca3af",
+                  fontSize: 11,
+                }}
+                interval={
+                  range === "7d"
+                    ? 0
+                    : "preserveStartEnd"
+                }
+              />
+
+              <YAxis
+                allowDecimals={false}
+                tickLine={false}
+                axisLine={false}
+                width={30}
+                tick={{
+                  fill: "#9ca3af",
+                  fontSize: 11,
+                }}
+              />
+
+              <Tooltip
+                content={<OrderVolumeTooltip />}
+                cursor={{
+                  fill: "rgba(37, 99, 235, 0.08)",
+                }}
+              />
+
+              <Bar
+                dataKey="orders"
+                fill="#2563eb"
+                radius={[6, 6, 0, 0]}
+                maxBarSize={34}
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
       </section>
 
       <div
@@ -881,7 +966,32 @@ function RevenueTooltip({
     </div>
   );
 }
+function OrderVolumeTooltip({
+  active,
+  payload,
+}: any) {
+  if (!active || !payload?.length) {
+    return null;
+  }
 
+  const point = payload[0].payload as ChartPoint;
+
+  return (
+    <div style={tooltipBox}>
+      <p style={tooltipDate}>
+        {point.fullDate}
+      </p>
+
+      <strong style={tooltipValue}>
+        {point.orders} 单
+      </strong>
+
+      <p style={tooltipOrders}>
+        营业额：{formatMoney(point.revenue)}
+      </p>
+    </div>
+  );
+}
 function getPeriod(range: RangeType) {
   const currentEnd = startOfDay(new Date());
 
@@ -1344,6 +1454,40 @@ const chartContainer = {
   width: "100%",
   height: 360,
   marginTop: 22,
+};
+const volumeHeader = {
+  marginTop: 20,
+  paddingTop: 20,
+  borderTop: "1px solid #e5e7eb",
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 14,
+};
+
+const volumeEyebrow = {
+  margin: "0 0 4px",
+  color: "#2563eb",
+  fontSize: 11,
+  fontWeight: 900,
+  letterSpacing: "1.2px",
+};
+
+const volumeTitle = {
+  margin: 0,
+  color: "#111827",
+  fontSize: 18,
+};
+
+const volumeTotal = {
+  color: "#2563eb",
+  fontSize: 20,
+};
+
+const volumeChartContainer = {
+  width: "100%",
+  height: 180,
+  marginTop: 10,
 };
 
 const tooltipBox = {
