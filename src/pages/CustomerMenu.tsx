@@ -1,16 +1,19 @@
 import { useEffect, useState } from "react";
 import type { Service } from "../types/database";
 import { ServiceService } from "../services/serviceService";
-
+import type { Package } from "../services/packageService";
+import { PackageService } from "../services/packageService";
 import Hero from "../components/menu/Hero";
 import CategorySection from "../components/menu/CategorySection";
 import BookingModal from "../components/menu/BookingModal";
 import Footer from "../components/menu/Footer";
-
+import PackageCard from "../components/menu/PackageCard";
 function CustomerMenu() {
   const [services, setServices] = useState<Service[]>([]);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
-
+  const [selectedPackage, setSelectedPackage] =
+  useState<Package | null>(null);
+  const [packages, setPackages] = useState<Package[]>([]);
   async function loadServices() {
     try {
       const data = await ServiceService.getAll();
@@ -19,10 +22,18 @@ function CustomerMenu() {
       alert(error.message);
     }
   }
-
-  useEffect(() => {
-    loadServices();
-  }, []);
+async function loadPackages() {
+  try {
+    const data = await PackageService.getActive();
+    setPackages(data);
+  } catch (error: any) {
+    alert(error.message);
+  }
+}
+ useEffect(() => {
+  loadServices();
+  loadPackages();
+}, []);
 
   const categories = Array.from(
     new Set(services.map((service) => service.category))
@@ -32,7 +43,37 @@ function CustomerMenu() {
     <div style={page}>
       <Hero />
 
-      <section style={content}>
+     <section id="menu-content" style={content}>
+        {packages.length > 0 && (
+  <>
+    <h2
+      style={{
+        marginTop: 40,
+        marginBottom: 20,
+        fontSize: 30,
+      }}
+    >
+      🎁 热门套餐 / Packages
+    </h2>
+
+    <div
+  style={{
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill,minmax(360px,1fr))",
+    gap: 24,
+    marginBottom: 50,
+  }}
+>
+{packages.map((item) => (
+  <PackageCard
+    key={item.id}
+    packageItem={item}
+    onBook={() => setSelectedPackage(item)}
+  />
+))}
+</div>
+  </>
+)}
         <h1>服务菜单 / Service Menu</h1>
 
         <p style={{ color: "#6b7280" }}>
@@ -59,6 +100,12 @@ function CustomerMenu() {
           onClose={() => setSelectedService(null)}
         />
       )}
+      {selectedPackage && (
+  <BookingModal
+    packageItem={selectedPackage}
+    onClose={() => setSelectedPackage(null)}
+  />
+)}
     </div>
   );
 }

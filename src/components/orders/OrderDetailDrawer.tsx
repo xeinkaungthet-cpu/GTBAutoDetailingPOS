@@ -11,7 +11,6 @@ function OrderDetailDrawer({
   order,
   items,
   onClose,
-  onStatusChange,
 }: Props) {
   if (!open || !order) return null;
 

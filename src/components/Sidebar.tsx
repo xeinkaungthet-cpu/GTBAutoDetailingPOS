@@ -12,6 +12,7 @@ const menuItems = [
   { to: "/members", label: "会员管理", icon: "👥", permission: "members" },
   { to: "/vehicles", label: "车辆管理", icon: "🚘", permission: "vehicles" },
   { to: "/services", label: "服务项目", icon: "🔧", permission: "services" },
+  {to: "/packages",label: "套餐管理",icon: "🎁",permission: "services",},
   { to: "/products", label: "产品库存", icon: "📦", permission: "products" },
   { to: "/orders", label: "订单记录", icon: "📋", permission: "orders" },
   { to: "/reports", label: "报表", icon: "📈", permission: "reports" },

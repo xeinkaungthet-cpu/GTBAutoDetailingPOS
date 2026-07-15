@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { OrderService } from "../services/orderService";
 import { formatCurrency } from "../utils/currency";
-import OrderDetailDrawer from "../components/orders/OrderDetailDrawer";
-
 type OrderRecord = {
   id: number;
   order_no: string;

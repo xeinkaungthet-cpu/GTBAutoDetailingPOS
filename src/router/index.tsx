@@ -1,10 +1,9 @@
 import Appointments from "../pages/Appointments";
 import { Routes, Route } from "react-router-dom";
-
+import Packages from "../pages/Packages";
 import ProtectedRoute from "../components/ProtectedRoute";
 import PermissionRoute from "../components/PermissionRoute";
 import Sidebar from "../components/Sidebar";
-
 import Dashboard from "../pages/Dashboard";
 import POS from "../pages/POS";
 import Members from "../pages/Members";
@@ -113,6 +112,15 @@ function AppRouter() {
         }
       />
 
+<Route
+  path="/packages"
+  element={
+    <ProtectedPage permission="packages">
+      <Packages />
+    </ProtectedPage>
+  }
+/>
+
       <Route
         path="/products"
         element={
@@ -130,7 +138,7 @@ function AppRouter() {
           </ProtectedPage>
         }
       />
-
+<Route path="/packages" element={<Packages />} />
       <Route
         path="/reports"
         element={
