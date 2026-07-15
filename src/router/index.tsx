@@ -18,7 +18,7 @@ import CustomerMenu from "../pages/CustomerMenu";
 import BookingSuccess from "../pages/BookingSuccess";
 import Inspection from "../pages/Inspection";
 import Login from "../pages/login";
-
+import CustomerQR from "../pages/CustomerQR";
 function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <ProtectedRoute>
@@ -75,7 +75,10 @@ function AppRouter() {
           </ProtectedPage>
         }
       />
-
+<Route
+  path="/customer-qr"
+  element={<CustomerQR />}
+/>
 <Route
   path="/appointments"
   element={

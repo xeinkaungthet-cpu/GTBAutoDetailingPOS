@@ -18,6 +18,7 @@ const menuItems = [
   { to: "/reports", label: "报表", icon: "📈", permission: "reports" },
   { to: "/inspection", label: "车辆验车", icon: "🔍", permission: "inspection" },
   { to: "/employees", label: "员工", icon: "👨‍💼", permission: "employees" },
+ {to: "/customer-qr",label: "客户二维码",icon: "📱",permission: "settings",},
   { to: "/settings", label: "设置", icon: "⚙️", permission: "settings" },
 ];
 
