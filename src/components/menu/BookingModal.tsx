@@ -59,11 +59,7 @@ function BookingModal({
       0
   );
 
-  const bookingMinutes = Number(
-    packageItem?.estimated_minutes ??
-      service?.duration_minutes ??
-      0
-  );
+
 
   const packageServices =
     packageItem?.package_services
@@ -304,9 +300,7 @@ function BookingModal({
                   : service?.category || "Service"}
               </span>
 
-              <span>
-                ⏱ {bookingMinutes} 分钟
-              </span>
+              
             </div>
 
             <div style={servicePrice}>

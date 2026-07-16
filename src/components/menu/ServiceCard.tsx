@@ -202,23 +202,7 @@ function ServiceCard({ service, onBook }: Props) {
           </section>
         )}
 
-        <div style={metaRow}>
-  <span
-    style={{
-      ...status,
-      color: isAvailable
-        ? "#15803d"
-        : "#b91c1c",
-      background: isAvailable
-        ? "#dcfce7"
-        : "#fee2e2",
-    }}
-  >
-    {isAvailable
-      ? "可预约 / Available"
-      : "暂停预约 / Unavailable"}
-  </span>
-</div><div style={metaRow}>
+       <div style={metaRow}>
   <span
     style={{
       ...status,
@@ -236,40 +220,40 @@ function ServiceCard({ service, onBook }: Props) {
   </span>
 </div>
 
-        <div style={footer}>
-          <div>
-            <p style={priceLabel}>
-              STARTING FROM
-            </p>
+<div style={footer}>
+  <div>
+    <p style={priceLabel}>
+      STARTING FROM
+    </p>
 
-            <strong style={price}>
-              {formatCurrency(service.price)}
-            </strong>
-          </div>
+    <strong style={price}>
+      {formatCurrency(service.price)}
+    </strong>
+  </div>
 
-          <button
-            type="button"
-            disabled={!isAvailable}
-            onClick={() => onBook?.(service)}
-            style={{
-              ...bookButton,
-              opacity: isAvailable ? 1 : 0.55,
-              cursor: isAvailable
-                ? "pointer"
-                : "not-allowed",
-            }}
-          >
-            <span style={bookButtonChinese}>
-              📅 立即预约
-            </span>
+  <button
+    type="button"
+    disabled={!isAvailable}
+    onClick={() => onBook?.(service)}
+    style={{
+      ...bookButton,
+      opacity: isAvailable ? 1 : 0.55,
+      cursor: isAvailable
+        ? "pointer"
+        : "not-allowed",
+    }}
+  >
+    <span style={bookButtonChinese}>
+      📅 立即预约
+    </span>
 
-            <span style={bookButtonEnglish}>
-              Book Now
-            </span>
-          </button>
-        </div>
-      </div>
-    </article>
+    <span style={bookButtonEnglish}>
+      Book Now
+    </span>
+  </button>
+</div>
+</div>
+</article>
   );
 }
 

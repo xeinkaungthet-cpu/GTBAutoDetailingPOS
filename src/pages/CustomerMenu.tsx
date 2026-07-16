@@ -12,7 +12,7 @@ import CategorySection from "../components/menu/CategorySection";
 import BookingModal from "../components/menu/BookingModal";
 import Footer from "../components/menu/Footer";
 import PackageCard from "../components/menu/PackageCard";
-
+import ItemDetailModal from "../components/menu/ItemDetailModal";
 type ViewMode =
   | "all"
   | "packages"
@@ -27,7 +27,11 @@ function CustomerMenu() {
 
   const [selectedPackage, setSelectedPackage] =
     useState<Package | null>(null);
+const [detailService, setDetailService] =
+  useState<Service | null>(null);
 
+const [detailPackage, setDetailPackage] =
+  useState<Package | null>(null);
   const [searchQuery, setSearchQuery] =
     useState("");
 
@@ -485,16 +489,12 @@ function CustomerMenu() {
                   {visiblePackages.map(
                     (item) => (
                       <PackageCard
-                        key={item.id}
-                        packageItem={item}
-                        onBook={(
-                          packageItem
-                        ) =>
-                          setSelectedPackage(
-                            packageItem
-                          )
-                        }
-                      />
+  key={item.id}
+  packageItem={item}
+  onBook={(packageItem) =>
+    setDetailPackage(packageItem)
+  }
+/>
                     )
                   )}
                 </div>
@@ -543,10 +543,8 @@ function CustomerMenu() {
                           category
                       )}
                       onBook={(service) =>
-                        setSelectedService(
-                          service
-                        )
-                      }
+  setDetailService(service)
+}
                     />
                   )
                 )}
@@ -556,7 +554,31 @@ function CustomerMenu() {
 
         <Footer />
       </section>
+{detailService && (
+  <ItemDetailModal
+    service={detailService}
+    onClose={() =>
+      setDetailService(null)
+    }
+    onBook={() => {
+      setSelectedService(detailService);
+      setDetailService(null);
+    }}
+  />
+)}
 
+{detailPackage && (
+  <ItemDetailModal
+    packageItem={detailPackage}
+    onClose={() =>
+      setDetailPackage(null)
+    }
+    onBook={() => {
+      setSelectedPackage(detailPackage);
+      setDetailPackage(null);
+    }}
+  />
+)}
       {selectedService && (
         <BookingModal
           service={selectedService}
