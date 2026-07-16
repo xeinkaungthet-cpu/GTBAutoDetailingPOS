@@ -203,32 +203,38 @@ function ServiceCard({ service, onBook }: Props) {
         )}
 
         <div style={metaRow}>
-          <div style={duration}>
-            <span>
-              ⏱ {service.duration_minutes || 0} Minutes
-            </span>
-
-            <span style={durationChinese}>
-              预计 {service.duration_minutes || 0} 分钟
-            </span>
-          </div>
-
-          <span
-            style={{
-              ...status,
-              color: isAvailable
-                ? "#15803d"
-                : "#b91c1c",
-              background: isAvailable
-                ? "#dcfce7"
-                : "#fee2e2",
-            }}
-          >
-            {isAvailable
-              ? "可预约 / Available"
-              : "暂停预约 / Unavailable"}
-          </span>
-        </div>
+  <span
+    style={{
+      ...status,
+      color: isAvailable
+        ? "#15803d"
+        : "#b91c1c",
+      background: isAvailable
+        ? "#dcfce7"
+        : "#fee2e2",
+    }}
+  >
+    {isAvailable
+      ? "可预约 / Available"
+      : "暂停预约 / Unavailable"}
+  </span>
+</div><div style={metaRow}>
+  <span
+    style={{
+      ...status,
+      color: isAvailable
+        ? "#15803d"
+        : "#b91c1c",
+      background: isAvailable
+        ? "#dcfce7"
+        : "#fee2e2",
+    }}
+  >
+    {isAvailable
+      ? "可预约 / Available"
+      : "暂停预约 / Unavailable"}
+  </span>
+</div>
 
         <div style={footer}>
           <div>
@@ -572,27 +578,14 @@ const comparisonArrow = {
 
 const metaRow = {
   display: "flex",
-  alignItems: "flex-start",
-  justifyContent: "space-between",
+  alignItems: "center",
+  justifyContent: "flex-end",
   flexWrap: "wrap" as const,
   gap: 12,
   marginTop: 18,
 };
 
-const duration = {
-  display: "flex",
-  flexDirection: "column" as const,
-  gap: 3,
-  color: "#475569",
-  fontSize: 13,
-  fontWeight: 700,
-};
 
-const durationChinese = {
-  color: "#94a3b8",
-  fontSize: 11,
-  fontWeight: 500,
-};
 
 const status = {
   display: "inline-flex",
