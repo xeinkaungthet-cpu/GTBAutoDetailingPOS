@@ -985,19 +985,64 @@ function RevenueTooltip({
 
   const point = payload[0].payload as ChartPoint;
 
+  const difference =
+    point.revenue - point.movingAverage;
+
+  const differencePercent =
+    point.movingAverage > 0
+      ? (difference / point.movingAverage) * 100
+      : 0;
+
+  const isUp = difference >= 0;
+
   return (
     <div style={tooltipBox}>
       <p style={tooltipDate}>
         {point.fullDate}
       </p>
 
-      <strong style={tooltipValue}>
-        {formatMoney(point.revenue)}
-      </strong>
+      <div style={tooltipDataRow}>
+        <span style={tooltipLabel}>
+          当日营业额
+        </span>
 
-      <p style={tooltipOrders}>
-        {point.orders} 单订单
-      </p>
+        <strong style={tooltipValueSmall}>
+          {formatMoney(point.revenue)}
+        </strong>
+      </div>
+
+      <div style={tooltipDataRow}>
+        <span style={tooltipLabel}>
+          7日平均
+        </span>
+
+        <strong style={tooltipAverageValue}>
+          {formatMoney(point.movingAverage)}
+        </strong>
+      </div>
+
+      <div style={tooltipDataRow}>
+        <span style={tooltipLabel}>
+          当日订单
+        </span>
+
+        <strong style={tooltipValueSmall}>
+          {point.orders} 单
+        </strong>
+      </div>
+
+      <div
+        style={{
+          ...tooltipTrend,
+          color: isUp
+            ? "#86efac"
+            : "#fca5a5",
+        }}
+      >
+        {isUp ? "▲" : "▼"}{" "}
+        {Math.abs(differencePercent).toFixed(1)}%
+        相比7日平均
+      </div>
     </div>
   );
 }
@@ -1432,6 +1477,37 @@ const chartEyebrow = {
   fontWeight: 900,
   fontSize: 12,
   letterSpacing: "1.4px",
+};
+
+const tooltipDataRow = {
+  marginTop: 10,
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 20,
+};
+
+const tooltipLabel = {
+  color: "#9ca3af",
+  fontSize: 12,
+};
+
+const tooltipValueSmall = {
+  color: "#ffffff",
+  fontSize: 15,
+};
+
+const tooltipAverageValue = {
+  color: "#fbbf24",
+  fontSize: 15,
+};
+
+const tooltipTrend = {
+  marginTop: 12,
+  paddingTop: 10,
+  borderTop: "1px solid rgba(255,255,255,.12)",
+  fontSize: 12,
+  fontWeight: 800,
 };
 
 const chartTitle = {

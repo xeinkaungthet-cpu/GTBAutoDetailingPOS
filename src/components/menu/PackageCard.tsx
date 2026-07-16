@@ -15,11 +15,25 @@ function PackageCard({
       ?.map((item) => item.services)
       .filter(Boolean) ?? [];
 
+  const originalPrice = Number(
+    packageItem.original_price || 0
+  );
+
+  const currentPrice = Number(
+    packageItem.package_price || 0
+  );
+
   const savings = Math.max(
-    Number(packageItem.original_price || 0) -
-      Number(packageItem.package_price || 0),
+    originalPrice - currentPrice,
     0
   );
+
+  const discountPercent =
+    originalPrice > 0 && savings > 0
+      ? Math.round(
+          (savings / originalPrice) * 100
+        )
+      : 0;
 
   return (
     <article style={card}>
@@ -31,7 +45,9 @@ function PackageCard({
             style={image}
           />
         ) : (
-          <div style={placeholder}>🎁</div>
+          <div style={placeholder}>
+            🎁
+          </div>
         )}
 
         <div style={badgeRow}>
@@ -45,6 +61,12 @@ function PackageCard({
             </span>
           )}
         </div>
+
+        {discountPercent > 0 && (
+          <div style={discountBadge}>
+            SAVE {discountPercent}%
+          </div>
+        )}
       </div>
 
       <div style={content}>
@@ -85,9 +107,12 @@ function PackageCard({
                 key={service?.id}
                 style={includedItem}
               >
-                <span>
-                  ✓ {service?.service_name}
-                </span>
+                <div style={serviceChinese}>
+                  <span style={checkIcon}>✓</span>
+                  <span>
+                    {service?.service_name}
+                  </span>
+                </div>
 
                 {service?.service_name_en && (
                   <small style={includedEnglish}>
@@ -99,41 +124,51 @@ function PackageCard({
           )}
         </div>
 
-        <div style={metaRow}>
-          <span style={duration}>
-            ⏱ {packageItem.estimated_minutes || 0} Minutes
-          </span>
+        <div style={availabilityRow}>
+          <span style={statusDot} />
 
-          <span style={status}>
+          <span style={statusText}>
             可预约 / Available
           </span>
         </div>
 
         <div style={footer}>
-          <div>
-            <span style={originalPrice}>
-              原价{" "}
-              {formatCurrency(
-                packageItem.original_price
-              )}
-            </span>
+          <div style={priceSection}>
+            {originalPrice > currentPrice && (
+              <div style={originalPriceRow}>
+                <span style={originalLabel}>
+                  原价
+                </span>
 
-            <strong style={packagePrice}>
-              {formatCurrency(
-                packageItem.package_price
-              )}
-            </strong>
+                <span style={originalPriceStyle}>
+                  {formatCurrency(originalPrice)}
+                </span>
+              </div>
+            )}
+
+            <div style={currentPriceRow}>
+              <span style={currentLabel}>
+                现价
+              </span>
+
+              <strong style={packagePrice}>
+                {formatCurrency(currentPrice)}
+              </strong>
+            </div>
 
             {savings > 0 && (
-              <span style={savingText}>
-                节省 {formatCurrency(savings)}
-              </span>
+              <div style={savingText}>
+                立即节省{" "}
+                {formatCurrency(savings)}
+              </div>
             )}
           </div>
 
           <button
             type="button"
-            onClick={() => onBook?.(packageItem)}
+            onClick={() =>
+              onBook?.(packageItem)
+            }
             style={bookButton}
           >
             <span style={bookChinese}>
@@ -153,10 +188,12 @@ function PackageCard({
 const card = {
   overflow: "hidden",
   border: "1px solid #e2e8f0",
-  borderRadius: 22,
-  background: "#fff",
+  borderRadius: 24,
+  background: "#ffffff",
   boxShadow:
-    "0 14px 36px rgba(15,23,42,.09)",
+    "0 18px 45px rgba(15,23,42,.10)",
+  transition:
+    "transform .2s ease, box-shadow .2s ease",
 };
 
 const imageWrapper = {
@@ -197,8 +234,8 @@ const badgeRow = {
 const packageBadge = {
   padding: "7px 11px",
   borderRadius: 999,
-  background: "rgba(37,99,235,.94)",
-  color: "#fff",
+  background: "rgba(37,99,235,.95)",
+  color: "#ffffff",
   fontSize: 10,
   fontWeight: 900,
 };
@@ -206,14 +243,28 @@ const packageBadge = {
 const popularBadge = {
   padding: "7px 11px",
   borderRadius: 999,
-  background: "rgba(220,38,38,.94)",
-  color: "#fff",
+  background: "rgba(220,38,38,.95)",
+  color: "#ffffff",
   fontSize: 10,
   fontWeight: 900,
 };
 
+const discountBadge = {
+  position: "absolute" as const,
+  right: 14,
+  bottom: 14,
+  padding: "8px 12px",
+  borderRadius: 999,
+  background: "#111827",
+  color: "#fbbf24",
+  fontSize: 11,
+  fontWeight: 900,
+  boxShadow:
+    "0 8px 18px rgba(0,0,0,.20)",
+};
+
 const content = {
-  padding: 20,
+  padding: 22,
 };
 
 const title = {
@@ -248,14 +299,16 @@ const descriptionEn = {
 const includedBox = {
   display: "flex",
   flexDirection: "column" as const,
-  gap: 8,
+  gap: 10,
   marginTop: 18,
-  padding: 15,
-  borderRadius: 14,
+  padding: 16,
+  borderRadius: 15,
   background: "#f8fafc",
+  border: "1px solid #f1f5f9",
 };
 
 const includedTitle = {
+  marginBottom: 2,
   color: "#2563eb",
   fontSize: 12,
 };
@@ -263,12 +316,24 @@ const includedTitle = {
 const includedItem = {
   display: "flex",
   flexDirection: "column" as const,
-  gap: 2,
+  gap: 3,
   color: "#334155",
   fontSize: 13,
 };
 
+const serviceChinese = {
+  display: "flex",
+  alignItems: "center",
+  gap: 7,
+};
+
+const checkIcon = {
+  color: "#16a34a",
+  fontWeight: 900,
+};
+
 const includedEnglish = {
+  paddingLeft: 20,
   color: "#94a3b8",
   fontSize: 11,
 };
@@ -279,25 +344,26 @@ const emptyText = {
   fontSize: 12,
 };
 
-const metaRow = {
-  display: "flex",
-  justifyContent: "space-between",
+const availabilityRow = {
+  display: "inline-flex",
   alignItems: "center",
-  gap: 12,
+  gap: 7,
   marginTop: 16,
-};
-
-const duration = {
-  color: "#64748b",
-  fontSize: 12,
-};
-
-const status = {
-  padding: "6px 9px",
+  padding: "7px 11px",
   borderRadius: 999,
   background: "#dcfce7",
+};
+
+const statusDot = {
+  width: 8,
+  height: 8,
+  borderRadius: "50%",
+  background: "#16a34a",
+};
+
+const statusText = {
   color: "#15803d",
-  fontSize: 10,
+  fontSize: 11,
   fontWeight: 900,
 };
 
@@ -306,47 +372,82 @@ const footer = {
   justifyContent: "space-between",
   alignItems: "flex-end",
   flexWrap: "wrap" as const,
-  gap: 16,
+  gap: 18,
   marginTop: 20,
+  paddingTop: 18,
+  borderTop: "1px solid #f1f5f9",
 };
 
-const originalPrice = {
-  display: "block",
-  color: "#94a3b8",
+const priceSection = {
+  display: "flex",
+  flexDirection: "column" as const,
+  alignItems: "flex-start",
+};
+
+const originalPriceRow = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+};
+
+const originalLabel = {
+  color: "#64748b",
   fontSize: 12,
+  fontWeight: 700,
+};
+
+const originalPriceStyle = {
+  color: "#94a3b8",
+  fontSize: 14,
   textDecoration: "line-through",
+  textDecorationThickness: "2px",
+};
+
+const currentPriceRow = {
+  display: "flex",
+  alignItems: "baseline",
+  gap: 8,
+  marginTop: 5,
+};
+
+const currentLabel = {
+  padding: "4px 7px",
+  borderRadius: 6,
+  background: "#fee2e2",
+  color: "#dc2626",
+  fontSize: 11,
+  fontWeight: 900,
 };
 
 const packagePrice = {
-  display: "block",
-  marginTop: 4,
-  color: "#2563eb",
-  fontSize: 29,
+  color: "#dc2626",
+  fontSize: 31,
   lineHeight: 1.1,
+  fontWeight: 900,
 };
 
 const savingText = {
-  display: "block",
-  marginTop: 6,
+  marginTop: 7,
   color: "#15803d",
-  fontSize: 11,
+  fontSize: 12,
   fontWeight: 800,
 };
 
 const bookButton = {
-  minWidth: 135,
-  padding: "11px 16px",
+  minWidth: 140,
+  padding: "12px 17px",
   display: "flex",
   flexDirection: "column" as const,
   alignItems: "center",
   gap: 2,
   border: "none",
-  borderRadius: 13,
-  background: "#7c3aed",
-  color: "#fff",
+  borderRadius: 14,
+  background:
+    "linear-gradient(135deg,#7c3aed,#6d28d9)",
+  color: "#ffffff",
   cursor: "pointer",
   boxShadow:
-    "0 8px 18px rgba(124,58,237,.22)",
+    "0 10px 22px rgba(124,58,237,.25)",
 };
 
 const bookChinese = {
