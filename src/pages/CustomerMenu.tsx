@@ -12,6 +12,7 @@ import CategorySection from "../components/menu/CategorySection";
 import BookingModal from "../components/menu/BookingModal";
 import Footer from "../components/menu/Footer";
 import PackageCard from "../components/menu/PackageCard";
+import { QRCodeSVG } from "qrcode.react";
 import ItemDetailModal from "../components/menu/ItemDetailModal";
 type ViewMode =
   | "all"
@@ -568,7 +569,83 @@ function scrollToTop() {
               </section>
             )}
         </div>
+<section
+  style={{
+    padding: "48px 20px",
+    background: "#f8fafc",
+  }}
+>
+  <div
+    style={{
+      maxWidth: 520,
+      margin: "0 auto",
+      padding: 30,
+      background: "#ffffff",
+      borderRadius: 24,
+      textAlign: "center",
+      boxShadow: "0 18px 45px rgba(15,23,42,.10)",
+      border: "1px solid #e2e8f0",
+    }}
+  >
+    <div
+      style={{
+        display: "inline-flex",
+        padding: 16,
+        background: "#ffffff",
+        borderRadius: 18,
+        border: "1px solid #e2e8f0",
+      }}
+    >
+      <QRCodeSVG
+        value="https://gtbautodetailingpos.pages.dev/menu"
+        size={190}
+        level="H"
+        includeMargin
+      />
+    </div>
 
+    <h2
+      style={{
+        margin: "22px 0 6px",
+        color: "#0f172a",
+        fontSize: 25,
+      }}
+    >
+      扫码查看服务菜单
+    </h2>
+
+    <p
+      style={{
+        margin: "0 0 18px",
+        color: "#64748b",
+        fontSize: 14,
+      }}
+    >
+      Scan to View Our Service Menu
+    </p>
+
+    <a
+      href="https://gtbautodetailingpos.pages.dev/menu"
+      target="_blank"
+      rel="noreferrer"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        minHeight: 44,
+        padding: "0 20px",
+        borderRadius: 999,
+        background: "#111827",
+        color: "#ffffff",
+        textDecoration: "none",
+        fontWeight: 800,
+        fontSize: 14,
+      }}
+    >
+      打开菜单 / Open Menu
+    </a>
+  </div>
+</section>
         <Footer />
       </section>
 {detailService && (
