@@ -132,13 +132,13 @@ function PackageCard({
             onClick={() => onBook?.(packageItem)}
             style={bookButton}
           >
-            <span style={bookChinese}>
-              📅 立即预约
-            </span>
+           <span style={bookChinese}>
+  🔍 查看详情
+</span>
 
-            <span style={bookEnglish}>
-              Book Package
-            </span>
+<span style={bookEnglish}>
+  View Details
+</span>
           </button>
         </div>
       </div>

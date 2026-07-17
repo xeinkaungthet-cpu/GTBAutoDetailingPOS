@@ -244,12 +244,12 @@ function ServiceCard({ service, onBook }: Props) {
     }}
   >
     <span style={bookButtonChinese}>
-      📅 立即预约
-    </span>
+  🔍 查看详情
+</span>
 
-    <span style={bookButtonEnglish}>
-      Book Now
-    </span>
+<span style={bookButtonEnglish}>
+  View Details
+</span>
   </button>
 </div>
 </div>
