@@ -174,7 +174,24 @@ const [detailPackage, setDetailPackage] =
     setSelectedCategory("全部");
     setViewMode("all");
   }
+async function copyWeChatId() {
+  try {
+    await navigator.clipboard.writeText("buyaowen9");
+    alert("微信号已复制 / WeChat ID Copied");
+  } catch {
+    window.prompt(
+      "请复制微信号 / Copy WeChat ID:",
+      "buyaowen9"
+    );
+  }
+}
 
+function scrollToTop() {
+  window.scrollTo({
+    top: 0,
+    behavior: "smooth",
+  });
+}
   function handleSearchSubmit(
     event: React.FormEvent<HTMLFormElement>
   ) {
@@ -596,6 +613,42 @@ const [detailPackage, setDetailPackage] =
           }
         />
       )}
+      <div style={floatingActions}>
+  <a
+    href="tel:09443751188"
+    style={floatingPrimaryButton}
+    aria-label="电话联系"
+    title="电话联系 / Call Us"
+  >
+    📞
+    <span style={floatingButtonText}>
+      电话 / Call
+    </span>
+  </a>
+
+  <button
+    type="button"
+    onClick={copyWeChatId}
+    style={floatingSecondaryButton}
+    aria-label="复制微信号"
+    title="微信联系 / WeChat"
+  >
+    💬
+    <span style={floatingButtonText}>
+      微信 / WeChat
+    </span>
+  </button>
+
+  <button
+    type="button"
+    onClick={scrollToTop}
+    style={floatingTopButton}
+    aria-label="返回顶部"
+    title="返回顶部 / Back to Top"
+  >
+    ↑
+  </button>
+</div>
     </div>
   );
 }
@@ -1055,5 +1108,62 @@ const packageGrid = {
   gap: 24,
   marginBottom: 50,
 };
+const floatingActions = {
+  position: "fixed" as const,
+  right: 18,
+  bottom: 20,
+  zIndex: 900,
+  display: "flex",
+  flexDirection: "column" as const,
+  alignItems: "flex-end",
+  gap: 10,
+};
 
+const floatingButtonBase = {
+  minHeight: 46,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 7,
+  padding: "0 15px",
+  border: "none",
+  borderRadius: 999,
+  color: "#ffffff",
+  cursor: "pointer",
+  textDecoration: "none",
+  fontSize: 17,
+  fontWeight: 900,
+  boxShadow: "0 12px 28px rgba(15,23,42,.24)",
+};
+
+const floatingPrimaryButton = {
+  ...floatingButtonBase,
+  background: "linear-gradient(135deg,#16a34a,#15803d)",
+};
+
+const floatingSecondaryButton = {
+  ...floatingButtonBase,
+  background: "linear-gradient(135deg,#2563eb,#1d4ed8)",
+};
+
+const floatingTopButton = {
+  width: 46,
+  height: 46,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  border: "none",
+  borderRadius: "50%",
+  background: "#111827",
+  color: "#ffffff",
+  cursor: "pointer",
+  fontSize: 22,
+  fontWeight: 900,
+  boxShadow: "0 12px 28px rgba(15,23,42,.24)",
+};
+
+const floatingButtonText = {
+  fontSize: 12,
+  whiteSpace: "nowrap" as const,
+};
 export default CustomerMenu;
