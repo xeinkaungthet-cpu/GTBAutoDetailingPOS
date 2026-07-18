@@ -65,29 +65,80 @@ function OrderDetailDrawer({
 
         <h3>服务项目</h3>
 
-        {items.map((item: any) => (
-          <div
-            key={item.id}
-            style={itemCard}
-          >
-            <strong>
-              {item.services?.service_name ||
-                item.products?.product_name}
-            </strong>
+    {items.map((item: any) => {
+  const packageServices =
+    item.packages?.package_services
+      ?.slice()
+      .sort(
+        (a: any, b: any) =>
+          Number(a.sort_order || 0) -
+          Number(b.sort_order || 0)
+      )
+      .map(
+        (packageService: any) =>
+          packageService.services?.service_name
+      )
+      .filter(Boolean) ?? [];
 
-            <p>
-              数量：{item.quantity}
-            </p>
+  const itemName =
+    item.packages?.package_name ||
+    item.services?.service_name ||
+    item.products?.product_name ||
+    item.products?.name ||
+    "订单项目";
 
-            <p>
-              单价：￥{item.unit_price}
-            </p>
+  const itemType = item.packages
+    ? "套餐 / Package"
+    : item.services
+      ? "服务 / Service"
+      : "产品 / Product";
 
-            <h4>
-              ￥{item.total}
-            </h4>
-          </div>
-        ))}
+  return (
+    <div
+      key={item.id}
+      style={itemCard}
+    >
+      <strong>
+        {item.packages ? "🔥 " : ""}
+        {itemName}
+      </strong>
+
+      {item.packages?.package_name_en && (
+        <p>
+          {item.packages.package_name_en}
+        </p>
+      )}
+
+      <p>
+        类型：{itemType}
+      </p>
+
+      {item.packages &&
+        packageServices.length > 0 && (
+          <p>
+            包含服务：
+            {packageServices.join("、")}
+          </p>
+        )}
+
+      <p>
+        数量：{item.quantity || 1}
+      </p>
+
+      <p>
+        单价：￥{Number(
+          item.unit_price || 0
+        ).toLocaleString()}
+      </p>
+
+      <h4>
+        ￥{Number(
+          item.total || 0
+        ).toLocaleString()}
+      </h4>
+    </div>
+  );
+})}
 
         <hr />
 
