@@ -5,8 +5,8 @@ import { AuthService } from "../services/authService";
 function Login() {
   const navigate = useNavigate();
 
-  const [email, setEmail] = useState("admin@gtb.com");
-  const [password, setPassword] = useState("aa123123");
+const [email, setEmail] = useState("");
+const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function handleLogin() {
