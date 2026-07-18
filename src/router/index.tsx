@@ -1,31 +1,58 @@
-import Appointments from "../pages/Appointments";
-import { Routes, Route } from "react-router-dom";
-import Packages from "../pages/Packages";
+import type { ReactNode } from "react";
+import {
+  Navigate,
+  Route,
+  Routes,
+} from "react-router-dom";
+
 import ProtectedRoute from "../components/ProtectedRoute";
 import PermissionRoute from "../components/PermissionRoute";
 import Sidebar from "../components/Sidebar";
+
 import Dashboard from "../pages/Dashboard";
 import POS from "../pages/POS";
 import Members from "../pages/Members";
 import Vehicles from "../pages/Vehicles";
 import Services from "../pages/Services";
 import Products from "../pages/Products";
+import Packages from "../pages/Packages";
 import Orders from "../pages/Orders";
 import Reports from "../pages/Reports";
 import Employees from "../pages/Employees";
 import Settings from "../pages/Settings";
+import Appointments from "../pages/Appointments";
+import Inspection from "../pages/Inspection";
+
 import CustomerMenu from "../pages/CustomerMenu";
 import BookingSuccess from "../pages/BookingSuccess";
-import Inspection from "../pages/Inspection";
-import Login from "../pages/login";
 import CustomerQR from "../pages/CustomerQR";
 import MenuQRCode from "../pages/MenuQRCode";
-function AppLayout({ children }: { children: React.ReactNode }) {
+import Login from "../pages/login";
+
+function AppLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
   return (
     <ProtectedRoute>
-      <div style={{ display: "flex" }}>
+      <div
+        style={{
+          display: "flex",
+          minHeight: "100vh",
+        }}
+      >
         <Sidebar />
-        <main style={{ flex: 1, padding: 24 }}>{children}</main>
+
+        <main
+          style={{
+            flex: 1,
+            minWidth: 0,
+            padding: 24,
+          }}
+        >
+          {children}
+        </main>
       </div>
     </ProtectedRoute>
   );
@@ -36,12 +63,16 @@ function ProtectedPage({
   children,
 }: {
   permission?: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <AppLayout>
       {permission ? (
-        <PermissionRoute permission={permission}>{children}</PermissionRoute>
+        <PermissionRoute
+          permission={permission}
+        >
+          {children}
+        </PermissionRoute>
       ) : (
         children
       )}
@@ -52,50 +83,54 @@ function ProtectedPage({
 function AppRouter() {
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
+      {/* Public routes */}
+      <Route
+        path="/login"
+        element={<Login />}
+      />
 
-      <Route path="/menu" element={<CustomerMenu />} />
-<Route
-  path="/booking-success"
-  element={<BookingSuccess />}
-/>
+      <Route
+        path="/menu"
+        element={<CustomerMenu />}
+      />
+
+      <Route
+        path="/booking-success"
+        element={<BookingSuccess />}
+      />
+
+      {/* Protected business routes */}
       <Route
         path="/"
         element={
-          <ProtectedPage>
+          <ProtectedPage permission="dashboard">
             <Dashboard />
           </ProtectedPage>
         }
       />
-<Route
-  path="/menu-qr"
-  element={<MenuQRCode />}
-/>
+
       <Route
         path="/pos"
         element={
-          <ProtectedPage>
+          <ProtectedPage permission="pos">
             <POS />
           </ProtectedPage>
         }
       />
-<Route
-  path="/customer-qr"
-  element={<CustomerQR />}
-/>
-<Route
-  path="/appointments"
-  element={
-    <ProtectedPage permission="appointments">
-      <Appointments />
-    </ProtectedPage>
-  }
-/>
+
+      <Route
+        path="/appointments"
+        element={
+          <ProtectedPage permission="appointments">
+            <Appointments />
+          </ProtectedPage>
+        }
+      />
 
       <Route
         path="/members"
         element={
-          <ProtectedPage>
+          <ProtectedPage permission="members">
             <Members />
           </ProtectedPage>
         }
@@ -104,7 +139,7 @@ function AppRouter() {
       <Route
         path="/vehicles"
         element={
-          <ProtectedPage>
+          <ProtectedPage permission="vehicles">
             <Vehicles />
           </ProtectedPage>
         }
@@ -119,14 +154,14 @@ function AppRouter() {
         }
       />
 
-<Route
-  path="/packages"
-  element={
-    <ProtectedPage permission="packages">
-      <Packages />
-    </ProtectedPage>
-  }
-/>
+      <Route
+        path="/packages"
+        element={
+          <ProtectedPage permission="packages">
+            <Packages />
+          </ProtectedPage>
+        }
+      />
 
       <Route
         path="/products"
@@ -140,12 +175,12 @@ function AppRouter() {
       <Route
         path="/orders"
         element={
-          <ProtectedPage>
+          <ProtectedPage permission="orders">
             <Orders />
           </ProtectedPage>
         }
       />
-<Route path="/packages" element={<Packages />} />
+
       <Route
         path="/reports"
         element={
@@ -155,6 +190,14 @@ function AppRouter() {
         }
       />
 
+      <Route
+        path="/inspection"
+        element={
+          <ProtectedPage permission="inspection">
+            <Inspection />
+          </ProtectedPage>
+        }
+      />
 
       <Route
         path="/employees"
@@ -174,12 +217,33 @@ function AppRouter() {
         }
       />
 
+      {/* QR management pages require login */}
       <Route
-        path="/inspection"
+        path="/customer-qr"
         element={
           <ProtectedPage>
-            <Inspection />
+            <CustomerQR />
           </ProtectedPage>
+        }
+      />
+
+      <Route
+        path="/menu-qr"
+        element={
+          <ProtectedPage>
+            <MenuQRCode />
+          </ProtectedPage>
+        }
+      />
+
+      {/* Unknown address */}
+      <Route
+        path="*"
+        element={
+          <Navigate
+            to="/"
+            replace
+          />
         }
       />
     </Routes>
