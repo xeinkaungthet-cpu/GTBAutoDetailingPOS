@@ -63,9 +63,6 @@ function CustomerMenu() {
     useState<PublicBusinessProfile>(
       defaultBusinessProfile
     );
-  const [logoLoadFailed, setLogoLoadFailed] =
-    useState(false);
-
   const [selectedService, setSelectedService] =
     useState<Service | null>(null);
 
@@ -155,7 +152,7 @@ const [detailPackage, setDetailPackage] =
               : defaultBusinessProfile.business_days,
           });
 
-          setLogoLoadFailed(false);
+        
         }
       }
     } catch (error) {
@@ -284,17 +281,6 @@ const [detailPackage, setDetailPackage] =
     ? `mailto:${emailAddress}`
     : "";
 
-  const businessHours = `${formatBusinessTime(
-    businessProfile.opening_time
-  )} - ${formatBusinessTime(
-    businessProfile.closing_time
-  )}`;
-
-  const businessDaysText =
-    formatBusinessDays(
-      businessProfile.business_days
-    );
-
   function changeViewMode(mode: ViewMode) {
     setViewMode(mode);
 
@@ -393,107 +379,7 @@ function scrollToTop() {
         id="menu-content"
         style={content}
       >
-        <section
-          style={publicBrandSection}
-          className="customer-brand-card"
-        >
-          <div style={publicBrandLogo}>
-            {businessProfile.logo_url &&
-            !logoLoadFailed ? (
-              <img
-                src={businessProfile.logo_url}
-                alt={`${businessProfile.store_name} Logo`}
-                style={publicBrandLogoImage}
-                onError={() => {
-                  setLogoLoadFailed(true);
-                }}
-              />
-            ) : (
-              <span style={publicBrandFallback}>
-                🚗
-              </span>
-            )}
-          </div>
-
-          <div
-            style={publicBrandInformation}
-            className="customer-brand-details"
-          >
-            <p style={publicBrandEyebrow}>
-              OFFICIAL BUSINESS PROFILE
-            </p>
-
-            <h2 style={publicBrandTitle}>
-              {businessProfile.store_name}
-            </h2>
-
-            <p style={publicBrandSubtitle}>
-              {businessProfile.store_subtitle}
-            </p>
-
-            <div
-              style={publicBrandMeta}
-              className="customer-brand-meta"
-            >
-              {phoneLink && (
-                <a
-                  href={phoneLink}
-                  style={publicBrandMetaItem}
-                >
-                  📞 {businessProfile.phone}
-                </a>
-              )}
-
-              {wechatId && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    void copyWeChatId();
-                  }}
-                  style={publicBrandMetaButton}
-                  title={`点击复制微信号：${wechatId}`}
-                >
-                  💬 微信：{wechatId}
-                </button>
-              )}
-
-              {telegramLink && (
-                <a
-                  href={telegramLink}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={publicBrandMetaItem}
-                >
-                  ✈️ Telegram
-                </a>
-              )}
-
-              {emailLink && (
-                <a
-                  href={emailLink}
-                  style={publicBrandMetaItem}
-                >
-                  ✉️ {emailAddress}
-                </a>
-              )}
-
-              {businessProfile.address && (
-                <span style={publicBrandMetaItem}>
-                  📍 {businessProfile.address}
-                </span>
-              )}
-
-              <span style={publicBrandMetaItem}>
-                🕒 {businessHours}
-              </span>
-
-              <span style={publicBrandMetaItem}>
-                📅 {businessDaysText}
-              </span>
-            </div>
-          </div>
-        </section>
-
+      
         <div
   style={headingRow}
   className="menu-heading-row"
@@ -1023,38 +909,6 @@ function scrollToTop() {
   );
 }
 
-function formatBusinessTime(
-  value: string
-) {
-  if (!value) {
-    return "--:--";
-  }
-
-  return value.slice(0, 5);
-}
-
-function formatBusinessDays(
-  days: string[]
-) {
-  const labels: Record<string, string> = {
-    Monday: "周一",
-    Tuesday: "周二",
-    Wednesday: "周三",
-    Thursday: "周四",
-    Friday: "周五",
-    Saturday: "周六",
-    Sunday: "周日",
-  };
-
-  if (!days.length) {
-    return "营业日期待更新";
-  }
-
-  return days
-    .map((day) => labels[day] || day)
-    .join("、");
-}
-
 function getTelegramLink(value: string) {
   const telegram = value.trim();
 
@@ -1213,104 +1067,6 @@ const page = {
   background: "#f3f4f6",
 };
 
-const publicBrandSection = {
-  display: "flex",
-  alignItems: "center",
-  gap: 22,
-  padding: 24,
-  marginBottom: 26,
-  border: "1px solid #dbeafe",
-  borderRadius: 24,
-  background:
-    "linear-gradient(135deg,#ffffff,#eff6ff)",
-  boxShadow:
-    "0 16px 40px rgba(37,99,235,.10)",
-};
-
-const publicBrandLogo = {
-  width: 112,
-  height: 112,
-  minWidth: 112,
-  overflow: "hidden",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  border: "1px solid #bfdbfe",
-  borderRadius: 25,
-  background: "#ffffff",
-  boxShadow:
-    "0 12px 28px rgba(37,99,235,.16)",
-};
-
-const publicBrandLogoImage = {
-  width: "100%",
-  height: "100%",
-  display: "block",
-  objectFit: "contain" as const,
-  padding: 7,
-  boxSizing: "border-box" as const,
-};
-
-const publicBrandFallback = {
-  fontSize: 48,
-};
-
-const publicBrandInformation = {
-  minWidth: 0,
-  flex: 1,
-};
-
-const publicBrandEyebrow = {
-  margin: "0 0 7px",
-  color: "#2563eb",
-  fontSize: 10,
-  fontWeight: 900,
-  letterSpacing: "1.5px",
-};
-
-const publicBrandTitle = {
-  margin: 0,
-  color: "#0f172a",
-  fontSize: 30,
-  lineHeight: 1.2,
-};
-
-const publicBrandSubtitle = {
-  margin: "7px 0 0",
-  color: "#64748b",
-  fontSize: 14,
-  lineHeight: 1.6,
-};
-
-const publicBrandMeta = {
-  display: "grid",
-  gridTemplateColumns:
-    "repeat(2,minmax(0,1fr))",
-  gap: 10,
-  marginTop: 17,
-};
-
-const publicBrandMetaItem = {
-  display: "flex",
-  alignItems: "flex-start",
-  minWidth: 0,
-  padding: "10px 12px",
-  border: "1px solid #dbeafe",
-  borderRadius: 12,
-  color: "#334155",
-  textDecoration: "none",
-  fontSize: 12,
-  lineHeight: 1.5,
-  background: "#ffffff",
-};
-
-const publicBrandMetaButton = {
-  ...publicBrandMetaItem,
-  width: "100%",
-  cursor: "pointer",
-  fontFamily: "inherit",
-  textAlign: "left" as const,
-};
 
 const content = {
   maxWidth: 1200,
