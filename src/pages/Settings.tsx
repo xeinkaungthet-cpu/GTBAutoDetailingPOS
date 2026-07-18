@@ -1054,42 +1054,23 @@ address:
   </small>
 </label>
 
-<label className="settings-field">
-  <span>Telegram</span>
+<label className="settings-field settings-field-full">
+  <span>店铺地址 / Address</span>
 
-  <input
-    value={settings.telegram}
+  <textarea
+    value={settings.address}
     onChange={(event) =>
       updateField(
-        "telegram",
+        "address",
         event.target.value
       )
     }
-    placeholder="@username 或 https://t.me/username"
+    rows={3}
+    placeholder="例如：No. 123, Main Road, Yangon, Myanmar"
   />
 
   <small>
-    支持 username、@username 或完整 Telegram 链接。
-  </small>
-</label>
-
-<label className="settings-field">
-  <span>店铺邮箱 / Email</span>
-
-  <input
-    type="email"
-    value={settings.email}
-    onChange={(event) =>
-      updateField(
-        "email",
-        event.target.value
-      )
-    }
-    placeholder="admin@gtb.com"
-  />
-
-  <small>
-    用于客户联系、日报和系统通知。
+    地址将显示在客户菜单顶部和店铺资料中。
   </small>
 </label>
         </div>
@@ -1134,6 +1115,11 @@ address:
     {settings.email ||
       "尚未填写邮箱"}
   </span>
+  <span>
+  📍{" "}
+  {settings.address ||
+    "尚未填写店铺地址"}
+</span>
 </div>
           </div>
         </div>
