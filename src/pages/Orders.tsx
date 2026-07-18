@@ -33,9 +33,13 @@ type OrderRecord = {
 type OrderItem = {
   id: number;
   order_id: number;
+
   service_id?: number | null;
   product_id?: number | null;
+  package_id?: number | null;
+
   quantity?: number;
+
   unit_price?: number | string;
   discount?: number | string;
   total?: number | string;
@@ -44,6 +48,7 @@ type OrderItem = {
     id?: number;
     service_name?: string;
     category?: string;
+    price?: number | string;
     duration_minutes?: number;
     image_url?: string;
   } | null;
@@ -53,6 +58,36 @@ type OrderItem = {
     product_name?: string;
     name?: string;
     sku?: string;
+  } | null;
+
+  packages?: {
+    id?: number;
+
+    package_name?: string;
+    package_name_en?: string | null;
+
+    description?: string | null;
+    description_en?: string | null;
+
+    original_price?: number | string;
+    package_price?: number | string;
+
+    estimated_minutes?: number;
+    image_url?: string | null;
+
+    package_services?: Array<{
+      id?: number;
+      service_id?: number;
+      sort_order?: number;
+
+      services?: {
+        id?: number;
+        service_name?: string;
+        category?: string;
+        price?: number | string;
+        duration_minutes?: number;
+      } | null;
+    }>;
   } | null;
 };
 
@@ -580,54 +615,88 @@ function Orders() {
                 </div>
               ) : (
                 <div style={itemList}>
-                  {items.map((item) => {
-                    const itemName =
-                      item.services
-                        ?.service_name ||
-                      item.products?.product_name ||
-                      item.products?.name ||
-                      "订单项目";
+                 {items.map((item) => {
+  const packageServices =
+    item.packages?.package_services
+      ?.slice()
+      .sort(
+        (a, b) =>
+          Number(a.sort_order || 0) -
+          Number(b.sort_order || 0)
+      )
+      .map(
+        (packageService) =>
+          packageService.services?.service_name
+      )
+      .filter(
+        (serviceName): serviceName is string =>
+          Boolean(serviceName)
+      ) ?? [];
 
-                    const itemType =
-                      item.services
-                        ? "服务 / Service"
-                        : "产品 / Product";
+  const itemName =
+    item.packages?.package_name ||
+    item.services?.service_name ||
+    item.products?.product_name ||
+    item.products?.name ||
+    "订单项目";
 
-                    return (
-                      <div
-                        key={item.id}
-                        style={itemRow}
-                      >
-                        <div style={itemIcon}>
-                          {item.services
-                            ? "✨"
-                            : "📦"}
-                        </div>
+  const itemType = item.packages
+    ? "套餐 / Package"
+    : item.services
+      ? "服务 / Service"
+      : "产品 / Product";
 
-                        <div style={{ flex: 1 }}>
-                          <strong style={itemNameStyle}>
-                            {itemName}
-                          </strong>
+  const itemEmoji = item.packages
+    ? "🔥"
+    : item.services
+      ? "✨"
+      : "📦";
 
-                          <p style={itemMeta}>
-                            {itemType} · 数量{" "}
-                            {item.quantity || 1}
-                          </p>
+  return (
+    <div
+      key={item.id}
+      style={itemRow}
+    >
+      <div style={itemIcon}>
+        {itemEmoji}
+      </div>
 
-                          <p style={itemUnitPrice}>
-                            单价：
-                            {formatCurrency(
-                              item.unit_price
-                            )}
-                          </p>
-                        </div>
+      <div style={{ flex: 1 }}>
+        <strong style={itemNameStyle}>
+          {itemName}
+        </strong>
 
-                        <strong style={itemTotal}>
-                          {formatCurrency(item.total)}
-                        </strong>
-                      </div>
-                    );
-                  })}
+        {item.packages?.package_name_en && (
+          <p style={itemMeta}>
+            {item.packages.package_name_en}
+          </p>
+        )}
+
+        <p style={itemMeta}>
+          {itemType} · 数量{" "}
+          {item.quantity || 1}
+        </p>
+
+        {item.packages &&
+          packageServices.length > 0 && (
+            <p style={itemMeta}>
+              包含服务：
+              {packageServices.join("、")}
+            </p>
+          )}
+
+        <p style={itemUnitPrice}>
+          单价：
+          {formatCurrency(item.unit_price)}
+        </p>
+      </div>
+
+      <strong style={itemTotal}>
+        {formatCurrency(item.total)}
+      </strong>
+    </div>
+  );
+})}
                 </div>
               )}
             </section>

@@ -45,20 +45,58 @@ export const OrderService = {
   },
 
   // 获取订单项目
-  async getItems(orderId: number) {
-    const { data, error } = await supabase
-      .from("order_items")
-      .select(`
-        *,
-        services (*),
-        products (*)
-      `)
-      .eq("order_id", orderId);
+ // 获取订单项目
+async getItems(orderId: number) {
+  const { data, error } = await supabase
+    .from("order_items")
+    .select(`
+      *,
 
-    if (error) throw error;
+      services (
+        id,
+        service_name,
+        category,
+        price,
+        duration_minutes
+      ),
 
-    return data ?? [];
-  },
+      products (*),
+
+      packages (
+        id,
+        package_name,
+        package_name_en,
+        description,
+        description_en,
+        original_price,
+        package_price,
+        estimated_minutes,
+        image_url,
+
+        package_services (
+          id,
+          service_id,
+          sort_order,
+
+          services (
+            id,
+            service_name,
+            category,
+            price,
+            duration_minutes
+          )
+        )
+      )
+    `)
+    .eq("order_id", orderId)
+    .order("id", {
+      ascending: true,
+    });
+
+  if (error) throw error;
+
+  return data ?? [];
+},
 
   // 更新订单状态
   async updateStatus(
