@@ -3,6 +3,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { supabase } from "../lib/supabase";
 import type { Service } from "../types/database";
 import { ServiceService } from "../services/serviceService";
 import type { Package } from "../services/packageService";
@@ -19,9 +20,51 @@ type ViewMode =
   | "packages"
   | "services";
 
+type PublicBusinessProfile = {
+  store_name: string;
+  store_subtitle: string;
+  logo_url: string;
+  phone: string;
+  wechat: string;
+  telegram: string;
+  email: string;
+  address: string;
+  opening_time: string;
+  closing_time: string;
+  business_days: string[];
+};
+
+const defaultBusinessProfile: PublicBusinessProfile = {
+  store_name: "GTB Auto Detailing",
+  store_subtitle:
+    "Professional Auto Detailing & Car Wash",
+  logo_url: "",
+  phone: "09443751188",
+  wechat: "",
+  telegram: "",
+  email: "",
+  address: "",
+  opening_time: "09:00",
+  closing_time: "18:00",
+  business_days: [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+  ],
+};
+
 function CustomerMenu() {
   const [services, setServices] = useState<Service[]>([]);
   const [packages, setPackages] = useState<Package[]>([]);
+  const [businessProfile, setBusinessProfile] =
+    useState<PublicBusinessProfile>(
+      defaultBusinessProfile
+    );
+  const [logoLoadFailed, setLogoLoadFailed] =
+    useState(false);
 
   const [selectedService, setSelectedService] =
     useState<Service | null>(null);
@@ -52,14 +95,69 @@ const [detailPackage, setDetailPackage] =
     setErrorMessage("");
 
     try {
-      const [servicesData, packagesData] =
-        await Promise.all([
-          ServiceService.getAll(),
-          PackageService.getActive(),
-        ]);
+      const [
+        servicesData,
+        packagesData,
+        profileResponse,
+      ] = await Promise.all([
+        ServiceService.getAll(),
+        PackageService.getActive(),
+        supabase.rpc(
+          "get_public_business_profile"
+        ),
+      ]);
 
       setServices(servicesData);
       setPackages(packagesData);
+
+      if (profileResponse.error) {
+        console.error(
+          "读取公开店铺资料失败：",
+          profileResponse.error
+        );
+      } else {
+        const profileData = Array.isArray(
+          profileResponse.data
+        )
+          ? profileResponse.data[0]
+          : null;
+
+        if (profileData) {
+          setBusinessProfile({
+            store_name:
+              profileData.store_name ||
+              defaultBusinessProfile.store_name,
+            store_subtitle:
+              profileData.store_subtitle ||
+              defaultBusinessProfile.store_subtitle,
+            logo_url:
+              profileData.logo_url || "",
+            phone:
+              profileData.phone || "",
+            wechat:
+              profileData.wechat || "",
+            telegram:
+              profileData.telegram || "",
+            email:
+              profileData.email || "",
+            address:
+              profileData.address || "",
+            opening_time:
+              profileData.opening_time ||
+              defaultBusinessProfile.opening_time,
+            closing_time:
+              profileData.closing_time ||
+              defaultBusinessProfile.closing_time,
+            business_days: Array.isArray(
+              profileData.business_days
+            )
+              ? profileData.business_days
+              : defaultBusinessProfile.business_days,
+          });
+
+          setLogoLoadFailed(false);
+        }
+      }
     } catch (error) {
       const message =
         error instanceof Error
@@ -162,6 +260,41 @@ const [detailPackage, setDetailPackage] =
     visiblePackages.length +
     visibleServices.length;
 
+  const normalizedPhone =
+    businessProfile.phone.trim();
+
+  const phoneLink = normalizedPhone
+    ? `tel:${normalizedPhone.replace(
+        /[^\d+]/g,
+        ""
+      )}`
+    : "";
+
+  const wechatId =
+    businessProfile.wechat.trim();
+
+  const telegramLink = getTelegramLink(
+    businessProfile.telegram
+  );
+
+  const emailAddress =
+    businessProfile.email.trim();
+
+  const emailLink = emailAddress
+    ? `mailto:${emailAddress}`
+    : "";
+
+  const businessHours = `${formatBusinessTime(
+    businessProfile.opening_time
+  )} - ${formatBusinessTime(
+    businessProfile.closing_time
+  )}`;
+
+  const businessDaysText =
+    formatBusinessDays(
+      businessProfile.business_days
+    );
+
   function changeViewMode(mode: ViewMode) {
     setViewMode(mode);
 
@@ -175,17 +308,27 @@ const [detailPackage, setDetailPackage] =
     setSelectedCategory("全部");
     setViewMode("all");
   }
-async function copyWeChatId() {
-  try {
-    await navigator.clipboard.writeText("buyaowen9");
-    alert("微信号已复制 / WeChat ID Copied");
-  } catch {
-    window.prompt(
-      "请复制微信号 / Copy WeChat ID:",
-      "buyaowen9"
-    );
+
+  async function copyWeChatId() {
+    if (!wechatId) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(
+        wechatId
+      );
+
+      window.alert(
+        `微信号已复制：${wechatId}`
+      );
+    } catch {
+      window.prompt(
+        "请复制微信号 / Copy WeChat ID:",
+        wechatId
+      );
+    }
   }
-}
 
 function scrollToTop() {
   window.scrollTo({
@@ -227,6 +370,19 @@ function scrollToTop() {
             .customer-package-grid {
               grid-template-columns: 1fr !important;
             }
+
+            .customer-brand-card {
+              align-items: flex-start !important;
+              flex-direction: column;
+            }
+
+            .customer-brand-details {
+              width: 100%;
+            }
+
+            .customer-brand-meta {
+              grid-template-columns: 1fr !important;
+            }
           }
         `}
       </style>
@@ -237,6 +393,107 @@ function scrollToTop() {
         id="menu-content"
         style={content}
       >
+        <section
+          style={publicBrandSection}
+          className="customer-brand-card"
+        >
+          <div style={publicBrandLogo}>
+            {businessProfile.logo_url &&
+            !logoLoadFailed ? (
+              <img
+                src={businessProfile.logo_url}
+                alt={`${businessProfile.store_name} Logo`}
+                style={publicBrandLogoImage}
+                onError={() => {
+                  setLogoLoadFailed(true);
+                }}
+              />
+            ) : (
+              <span style={publicBrandFallback}>
+                🚗
+              </span>
+            )}
+          </div>
+
+          <div
+            style={publicBrandInformation}
+            className="customer-brand-details"
+          >
+            <p style={publicBrandEyebrow}>
+              OFFICIAL BUSINESS PROFILE
+            </p>
+
+            <h2 style={publicBrandTitle}>
+              {businessProfile.store_name}
+            </h2>
+
+            <p style={publicBrandSubtitle}>
+              {businessProfile.store_subtitle}
+            </p>
+
+            <div
+              style={publicBrandMeta}
+              className="customer-brand-meta"
+            >
+              {phoneLink && (
+                <a
+                  href={phoneLink}
+                  style={publicBrandMetaItem}
+                >
+                  📞 {businessProfile.phone}
+                </a>
+              )}
+
+              {wechatId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void copyWeChatId();
+                  }}
+                  style={publicBrandMetaButton}
+                  title={`点击复制微信号：${wechatId}`}
+                >
+                  💬 微信：{wechatId}
+                </button>
+              )}
+
+              {telegramLink && (
+                <a
+                  href={telegramLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={publicBrandMetaItem}
+                >
+                  ✈️ Telegram
+                </a>
+              )}
+
+              {emailLink && (
+                <a
+                  href={emailLink}
+                  style={publicBrandMetaItem}
+                >
+                  ✉️ {emailAddress}
+                </a>
+              )}
+
+              {businessProfile.address && (
+                <span style={publicBrandMetaItem}>
+                  📍 {businessProfile.address}
+                </span>
+              )}
+
+              <span style={publicBrandMetaItem}>
+                🕒 {businessHours}
+              </span>
+
+              <span style={publicBrandMetaItem}>
+                📅 {businessDaysText}
+              </span>
+            </div>
+          </div>
+        </section>
+
         <div
   style={headingRow}
   className="menu-heading-row"
@@ -691,43 +948,133 @@ function scrollToTop() {
         />
       )}
       <div style={floatingActions}>
-  <a
-    href="tel:09443751188"
-    style={floatingPrimaryButton}
-    aria-label="电话联系"
-    title="电话联系 / Call Us"
-  >
-    📞
-    <span style={floatingButtonText}>
-      电话 / Call
-    </span>
-  </a>
+        {phoneLink && (
+          <a
+            href={phoneLink}
+            style={floatingPrimaryButton}
+            aria-label="电话联系"
+            title={`电话联系：${businessProfile.phone}`}
+          >
+            📞
+            <span style={floatingButtonText}>
+              电话 / Call
+            </span>
+          </a>
+        )}
 
-  <button
-    type="button"
-    onClick={copyWeChatId}
-    style={floatingSecondaryButton}
-    aria-label="复制微信号"
-    title="微信联系 / WeChat"
-  >
-    💬
-    <span style={floatingButtonText}>
-      微信 / WeChat
-    </span>
-  </button>
+        {wechatId && (
+          <button
+            type="button"
+            onClick={() => {
+              void copyWeChatId();
+            }}
+            style={floatingWeChatButton}
+            aria-label="复制微信号"
+            title={`点击复制微信号：${wechatId}`}
+          >
+            💬
+            <span style={floatingButtonText}>
+              微信 / WeChat
+            </span>
+          </button>
+        )}
 
-  <button
-    type="button"
-    onClick={scrollToTop}
-    style={floatingTopButton}
-    aria-label="返回顶部"
-    title="返回顶部 / Back to Top"
-  >
-    ↑
-  </button>
-</div>
+        {telegramLink && (
+          <a
+            href={telegramLink}
+            target="_blank"
+            rel="noreferrer"
+            style={floatingTelegramButton}
+            aria-label="Telegram 联系"
+            title="Telegram 联系 / Contact Us"
+          >
+            ✈️
+            <span style={floatingButtonText}>
+              Telegram
+            </span>
+          </a>
+        )}
+
+        {emailLink && (
+          <a
+            href={emailLink}
+            style={floatingEmailButton}
+            aria-label="发送邮件"
+            title={`发送邮件：${emailAddress}`}
+          >
+            ✉️
+            <span style={floatingButtonText}>
+              Email
+            </span>
+          </a>
+        )}
+
+        <button
+          type="button"
+          onClick={scrollToTop}
+          style={floatingTopButton}
+          aria-label="返回顶部"
+          title="返回顶部 / Back to Top"
+        >
+          ↑
+        </button>
+      </div>
     </div>
   );
+}
+
+function formatBusinessTime(
+  value: string
+) {
+  if (!value) {
+    return "--:--";
+  }
+
+  return value.slice(0, 5);
+}
+
+function formatBusinessDays(
+  days: string[]
+) {
+  const labels: Record<string, string> = {
+    Monday: "周一",
+    Tuesday: "周二",
+    Wednesday: "周三",
+    Thursday: "周四",
+    Friday: "周五",
+    Saturday: "周六",
+    Sunday: "周日",
+  };
+
+  if (!days.length) {
+    return "营业日期待更新";
+  }
+
+  return days
+    .map((day) => labels[day] || day)
+    .join("、");
+}
+
+function getTelegramLink(value: string) {
+  const telegram = value.trim();
+
+  if (!telegram) {
+    return "";
+  }
+
+  if (/^https?:\/\//i.test(telegram)) {
+    return telegram;
+  }
+
+  if (telegram.startsWith("t.me/")) {
+    return `https://${telegram}`;
+  }
+
+  const username = telegram.replace(/^@/, "");
+
+  return username
+    ? `https://t.me/${encodeURIComponent(username)}`
+    : "";
 }
 
 function FilterButton({
@@ -864,6 +1211,105 @@ function getCategoryIcon(
 const page = {
   minHeight: "100vh",
   background: "#f3f4f6",
+};
+
+const publicBrandSection = {
+  display: "flex",
+  alignItems: "center",
+  gap: 22,
+  padding: 24,
+  marginBottom: 26,
+  border: "1px solid #dbeafe",
+  borderRadius: 24,
+  background:
+    "linear-gradient(135deg,#ffffff,#eff6ff)",
+  boxShadow:
+    "0 16px 40px rgba(37,99,235,.10)",
+};
+
+const publicBrandLogo = {
+  width: 112,
+  height: 112,
+  minWidth: 112,
+  overflow: "hidden",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  border: "1px solid #bfdbfe",
+  borderRadius: 25,
+  background: "#ffffff",
+  boxShadow:
+    "0 12px 28px rgba(37,99,235,.16)",
+};
+
+const publicBrandLogoImage = {
+  width: "100%",
+  height: "100%",
+  display: "block",
+  objectFit: "contain" as const,
+  padding: 7,
+  boxSizing: "border-box" as const,
+};
+
+const publicBrandFallback = {
+  fontSize: 48,
+};
+
+const publicBrandInformation = {
+  minWidth: 0,
+  flex: 1,
+};
+
+const publicBrandEyebrow = {
+  margin: "0 0 7px",
+  color: "#2563eb",
+  fontSize: 10,
+  fontWeight: 900,
+  letterSpacing: "1.5px",
+};
+
+const publicBrandTitle = {
+  margin: 0,
+  color: "#0f172a",
+  fontSize: 30,
+  lineHeight: 1.2,
+};
+
+const publicBrandSubtitle = {
+  margin: "7px 0 0",
+  color: "#64748b",
+  fontSize: 14,
+  lineHeight: 1.6,
+};
+
+const publicBrandMeta = {
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(2,minmax(0,1fr))",
+  gap: 10,
+  marginTop: 17,
+};
+
+const publicBrandMetaItem = {
+  display: "flex",
+  alignItems: "flex-start",
+  minWidth: 0,
+  padding: "10px 12px",
+  border: "1px solid #dbeafe",
+  borderRadius: 12,
+  color: "#334155",
+  textDecoration: "none",
+  fontSize: 12,
+  lineHeight: 1.5,
+  background: "#ffffff",
+};
+
+const publicBrandMetaButton = {
+  ...publicBrandMetaItem,
+  width: "100%",
+  cursor: "pointer",
+  fontFamily: "inherit",
+  textAlign: "left" as const,
 };
 
 const content = {
@@ -1218,9 +1664,19 @@ const floatingPrimaryButton = {
   background: "linear-gradient(135deg,#16a34a,#15803d)",
 };
 
-const floatingSecondaryButton = {
+const floatingWeChatButton = {
   ...floatingButtonBase,
-  background: "linear-gradient(135deg,#2563eb,#1d4ed8)",
+  background: "linear-gradient(135deg,#22c55e,#07c160)",
+};
+
+const floatingTelegramButton = {
+  ...floatingButtonBase,
+  background: "linear-gradient(135deg,#38bdf8,#229ed9)",
+};
+
+const floatingEmailButton = {
+  ...floatingButtonBase,
+  background: "linear-gradient(135deg,#8b5cf6,#6d28d9)",
 };
 
 const floatingTopButton = {

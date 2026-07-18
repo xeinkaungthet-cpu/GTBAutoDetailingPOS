@@ -23,10 +23,11 @@ type BusinessSettings = {
 store_name: string;
 store_subtitle: string;
 logo_url: string;
-  phone: string;
-  whatsapp: string;
-  email: string;
-  address: string;
+phone: string;
+wechat: string;
+telegram: string;
+email: string;
+address: string;
 
   currency: string;
   currency_symbol: string;
@@ -62,11 +63,12 @@ const defaultSettings: BusinessSettings = {
  store_name: "GTB Auto Detailing",
 store_subtitle:
   "Professional Auto Detailing & Car Wash",
-logo_url: "",
-  phone: "",
-  whatsapp: "",
-  email: "",
-  address: "",
+  logo_url: "",
+phone: "",
+wechat: "",
+telegram: "",
+email: "",
+address: "",
 
   currency: "USD",
   currency_symbol: "$",
@@ -691,12 +693,18 @@ async function removeLogo() {
           settings.store_name.trim(),
         store_subtitle:
           settings.store_subtitle.trim(),
-        phone: settings.phone.trim(),
-        whatsapp:
-          settings.whatsapp.trim(),
-        email: settings.email.trim(),
-        address:
-          settings.address.trim(),
+       phone: settings.phone.trim(),
+
+wechat:
+  settings.wechat.trim(),
+
+telegram:
+  settings.telegram.trim(),
+
+email: settings.email.trim(),
+
+address:
+  settings.address.trim(),
 
         currency: settings.currency,
         currency_symbol:
@@ -969,71 +977,121 @@ async function removeLogo() {
             />
           </label>
 
-          <label className="settings-field">
-            <span>联系电话</span>
+         <label className="settings-field">
+  <span>联系电话</span>
 
-            <input
-              value={settings.phone}
-              onChange={(event) =>
-                updateField(
-                  "phone",
-                  event.target.value
-                )
-              }
-              placeholder="+95..."
-            />
-          </label>
+  <input
+    value={settings.phone}
+    onChange={(event) =>
+      updateField(
+        "phone",
+        event.target.value
+      )
+    }
+    placeholder="+95 9..."
+  />
 
-          <label className="settings-field">
-            <span>
-              WhatsApp / WeChat
-            </span>
+  <small>
+    客户点击电话按钮时使用的联系电话。
+  </small>
+</label>
 
-            <input
-              value={
-                settings.whatsapp
-              }
-              onChange={(event) =>
-                updateField(
-                  "whatsapp",
-                  event.target.value
-                )
-              }
-              placeholder="WhatsApp number"
-            />
-          </label>
+<label className="settings-field">
+  <span>微信号 / WeChat ID</span>
 
-          <label className="settings-field settings-field-wide">
-            <span>店铺邮箱</span>
+  <input
+    value={settings.wechat}
+    onChange={(event) =>
+      updateField(
+        "wechat",
+        event.target.value
+      )
+    }
+    placeholder="例如：buyaowen9"
+  />
 
-            <input
-              type="email"
-              value={settings.email}
-              onChange={(event) =>
-                updateField(
-                  "email",
-                  event.target.value
-                )
-              }
-              placeholder="admin@gtb.com"
-            />
-          </label>
+  <small>
+    填写微信号，不需要填写二维码链接。
+  </small>
+</label>
 
-          <label className="settings-field settings-field-full">
-            <span>店铺地址</span>
+<label className="settings-field">
+  <span>Telegram</span>
 
-            <textarea
-              value={settings.address}
-              onChange={(event) =>
-                updateField(
-                  "address",
-                  event.target.value
-                )
-              }
-              rows={4}
-              placeholder="请输入完整店铺地址"
-            />
-          </label>
+  <input
+    value={settings.telegram}
+    onChange={(event) =>
+      updateField(
+        "telegram",
+        event.target.value
+      )
+    }
+    placeholder="@username 或 https://t.me/username"
+  />
+
+  <small>
+    支持 username、@username 或完整 Telegram 链接。
+  </small>
+</label>
+
+<label className="settings-field">
+  <span>店铺邮箱 / Email</span>
+
+  <input
+    type="email"
+    value={settings.email}
+    onChange={(event) =>
+      updateField(
+        "email",
+        event.target.value
+      )
+    }
+    placeholder="admin@gtb.com"
+  />
+
+  <small>
+    用于客户联系、日报和系统通知。
+  </small>
+</label>
+
+<label className="settings-field">
+  <span>Telegram</span>
+
+  <input
+    value={settings.telegram}
+    onChange={(event) =>
+      updateField(
+        "telegram",
+        event.target.value
+      )
+    }
+    placeholder="@username 或 https://t.me/username"
+  />
+
+  <small>
+    支持 username、@username 或完整 Telegram 链接。
+  </small>
+</label>
+
+<label className="settings-field">
+  <span>店铺邮箱 / Email</span>
+
+  <input
+    type="email"
+    value={settings.email}
+    onChange={(event) =>
+      updateField(
+        "email",
+        event.target.value
+      )
+    }
+    placeholder="admin@gtb.com"
+  />
+
+  <small>
+    用于客户联系、日报和系统通知。
+  </small>
+</label>
         </div>
 
         <div className="settings-preview-card">
@@ -1052,18 +1110,31 @@ async function removeLogo() {
                 "店铺副标题"}
             </p>
 
-            <div className="settings-preview-meta">
-              <span>
-                📞{" "}
-                {settings.phone ||
-                  "尚未填写电话"}
-              </span>
-              <span>
-                ✉️{" "}
-                {settings.email ||
-                  "尚未填写邮箱"}
-              </span>
-            </div>
+           <div className="settings-preview-meta">
+  <span>
+    📞{" "}
+    {settings.phone ||
+      "尚未填写电话"}
+  </span>
+
+  <span>
+    💬{" "}
+    {settings.wechat ||
+      "尚未填写微信号"}
+  </span>
+
+  <span>
+    ✈️{" "}
+    {settings.telegram ||
+      "尚未填写 Telegram"}
+  </span>
+
+  <span>
+    ✉️{" "}
+    {settings.email ||
+      "尚未填写邮箱"}
+  </span>
+</div>
           </div>
         </div>
       </>
@@ -1543,8 +1614,8 @@ async function removeLogo() {
             </strong>
 
             <p>
-              当前页面负责保存通知设置。后续接入 Email、WhatsApp
-              或其他消息服务后，系统将按照这些开关自动执行通知。
+              当前页面负责保存通知设置。后续接入 Email、微信和
+Telegram 消息服务后，系统将按照这些开关自动执行通知。
             </p>
           </div>
         </div>
