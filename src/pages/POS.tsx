@@ -27,7 +27,7 @@ import ServiceFilters from "../components/pos/ServiceFilters";
 import ShoppingCart, {
   type PosCartItem,
 } from "../components/pos/ShoppingCart";
-
+import OrderDetailDrawer from "../components/orders/OrderDetailDrawer";
 const PACKAGE_CATEGORY = "🔥 热门套餐";
 
 function POS() {
@@ -77,7 +77,15 @@ function POS() {
     checkingOut,
     setCheckingOut,
   ] = useState(false);
+const [
+  completedOrder,
+  setCompletedOrder,
+] = useState<any | null>(null);
 
+const [
+  completedItems,
+  setCompletedItems,
+] = useState<any[]>([]);
   const subtotal = useMemo(() => {
     return cart.reduce(
       (sum, item) =>
@@ -376,6 +384,7 @@ function POS() {
       ),
 
       originalPrice: null,
+      includedServices: [],
     });
   }
 
@@ -406,6 +415,17 @@ function POS() {
       originalPrice: Number(
         packageItem.original_price
       ),
+      includedServices:
+  packageItem.package_services
+    ?.map(
+      (packageService) =>
+        packageService.services
+          ?.service_name
+    )
+    .filter(
+      (serviceName): serviceName is string =>
+        Boolean(serviceName)
+    ) ?? [],
     });
   }
 
@@ -598,11 +618,127 @@ function POS() {
         throw itemError;
       }
 
-      alert(
-        `结账成功！订单号：${orderNo}`
-      );
+const selectedMember =
+  members.find(
+    (member) =>
+      Number(member.id) ===
+      Number(selectedMemberId)
+  ) ?? null;
 
-      resetOrder();
+const selectedVehicle =
+  vehicles.find(
+    (vehicle) =>
+      Number(vehicle.id) ===
+      Number(selectedVehicleId)
+  ) ?? null;
+
+const receiptItems =
+  cart.map(
+    (item, index) => ({
+      id: `${order.id}-${index}`,
+
+      order_id: order.id,
+
+      service_id:
+        item.itemType === "service"
+          ? item.serviceId
+          : null,
+
+      package_id:
+        item.itemType === "package"
+          ? item.packageId
+          : null,
+
+      product_id: null,
+
+      quantity: item.quantity,
+
+      unit_price: Number(
+        item.price
+      ),
+
+      discount: 0,
+
+      total:
+        Number(item.price) *
+        item.quantity,
+
+      services:
+        item.itemType === "service"
+          ? {
+              service_name:
+                item.name,
+            }
+          : null,
+
+      packages:
+        item.itemType === "package"
+          ? {
+              package_name:
+                item.name,
+
+              package_name_en:
+                item.nameEn ??
+                null,
+
+              package_services:
+                (
+                  item.includedServices ??
+                  []
+                ).map(
+                  (
+                    serviceName,
+                    serviceIndex
+                  ) => ({
+                    sort_order:
+                      serviceIndex,
+
+                    services: {
+                      service_name:
+                        serviceName,
+                    },
+                  })
+                ),
+            }
+          : null,
+
+      products: null,
+    })
+  );
+
+setCompletedOrder({
+  ...order,
+
+  order_no: orderNo,
+
+  members:
+    selectedMember,
+
+  vehicles:
+    selectedVehicle,
+
+  subtotal,
+
+  discount:
+    safeDiscount,
+
+  total,
+
+  payment_method:
+    paymentMethod,
+
+  payment_status:
+    "paid",
+
+  status:
+    "completed",
+});
+
+setCompletedItems(
+  receiptItems
+);
+
+resetOrder();
     } catch (error: unknown) {
       alert(
         getErrorMessage(error)
@@ -1134,6 +1270,26 @@ function POS() {
           </div>
         </div>
       )}
+      <OrderDetailDrawer
+  open={Boolean(
+    completedOrder
+  )}
+  order={
+    completedOrder
+  }
+  items={
+    completedItems
+  }
+  onClose={() => {
+    setCompletedOrder(
+      null
+    );
+
+    setCompletedItems(
+      []
+    );
+  }}
+/>
     </div>
   );
 }

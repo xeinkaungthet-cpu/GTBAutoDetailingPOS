@@ -11,6 +11,8 @@ export type PosCartItem = {
   price: number;
   originalPrice?: number | null;
 
+  includedServices?: string[];
+
   quantity: number;
 };
 
