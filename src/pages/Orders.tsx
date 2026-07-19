@@ -262,7 +262,7 @@ function Orders() {
     <div>
       <div style={pageHeader}>
         <div>
-          <p style={eyebrow}>GTB AUTO DETAILING</p>
+          <p style={eyebrow}>GTB Auto Detailing & Window Film</p>
 
           <h1 style={pageTitle}>
             订单记录 / Order Management

@@ -12,7 +12,7 @@ function MenuQRCode() {
     <div style={page}>
       <div style={card}>
         <div style={badge}>
-          GTB AUTO DETAILING
+          GTB Auto Detailing & Window Film
         </div>
 
         <h1 style={title}>

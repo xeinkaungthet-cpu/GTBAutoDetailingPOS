@@ -60,7 +60,7 @@ address: string;
 const defaultSettings: BusinessSettings = {
   id: 1,
 
- store_name: "GTB Auto Detailing",
+ store_name: "GTB Auto Detailing & Window Film",
 store_subtitle:
   "Professional Auto Detailing & Car Wash",
   logo_url: "",
@@ -75,7 +75,7 @@ address: "",
   tax_rate: 0,
   order_prefix: "GTB",
   receipt_footer:
-    "Thank you for choosing GTB Auto Detailing!",
+    "Thank you for choosing GTB Auto Detailing & Window Film!",
 
   opening_time: "09:00",
   closing_time: "18:00",
@@ -956,7 +956,7 @@ address:
                   event.target.value
                 )
               }
-              placeholder="GTB Auto Detailing"
+              placeholder="GTB Auto Detailing & Window Film"
             />
           </label>
 
@@ -1783,7 +1783,7 @@ Telegram 消息服务后，系统将按照这些开关自动执行通知。
           <div>
             <span>系统名称</span>
             <strong>
-              GTB Auto Detailing POS
+              GTB Auto Detailing & Window Film POS
             </strong>
           </div>
 

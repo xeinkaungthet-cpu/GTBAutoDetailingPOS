@@ -303,7 +303,7 @@ function Dashboard() {
               marginTop: 6,
             }}
           >
-            GTB Auto Detailing POS 营业总览
+            GTB Auto Detailing & Window Film POS 营业总览
           </p>
         </div>
 

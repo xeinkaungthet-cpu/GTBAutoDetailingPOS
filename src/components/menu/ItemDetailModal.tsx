@@ -87,7 +87,7 @@ function ItemDetailModal({
 
         <div style={body}>
           <p style={eyebrow}>
-            GTB AUTO DETAILING
+            GTB Auto Detailing & Window Film
           </p>
 
           <h2 style={titleStyle}>

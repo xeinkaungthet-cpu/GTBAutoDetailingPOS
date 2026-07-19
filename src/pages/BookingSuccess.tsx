@@ -38,7 +38,7 @@ function BookingSuccess() {
     if (!booking.appointmentNo) return;
 
     const content = [
-      "GTB Auto Detailing & Car Wash",
+      "GTB Auto Detailing & Window Film",
       "Appointment Confirmation",
       "",
       `预约编号：${booking.appointmentNo}`,
@@ -93,14 +93,14 @@ function BookingSuccess() {
     const calendarContent = [
       "BEGIN:VCALENDAR",
       "VERSION:2.0",
-      "PRODID:-//GTB Auto Detailing//Appointment//CN",
+      "PRODID:-//GTB Auto Detailing & Window Film//Appointment//CN",
       "BEGIN:VEVENT",
       `UID:${booking.appointmentNo}@gtb-auto-detailing`,
       `DTSTAMP:${toCalendarDate(new Date())}`,
       `DTSTART:${toCalendarDate(startDate)}`,
       `DTEND:${toCalendarDate(endDate)}`,
       `SUMMARY:${escapeCalendarText(
-        booking.serviceName || "GTB Auto Detailing Appointment"
+        booking.serviceName || "GTB Auto Detailing & Window Film Appointment"
       )}`,
       `DESCRIPTION:${escapeCalendarText(
         `预约编号：${booking.appointmentNo || "-"}`
@@ -159,7 +159,7 @@ function BookingSuccess() {
 
             <div>
               <p style={brandName}>
-                GTB AUTO DETAILING
+                GTB Auto Detailing & Window Film
               </p>
 
               <p style={brandSubtitle}>

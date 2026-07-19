@@ -311,7 +311,7 @@ const [editingId, setEditingId] =
       <div style={pageHeader}>
         <div>
           <p style={eyebrow}>
-            GTB AUTO DETAILING
+            GTB Auto Detailing & Window Film
           </p>
 
           <h1 style={pageTitle}>

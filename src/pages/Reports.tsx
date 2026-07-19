@@ -1288,7 +1288,7 @@ order.vehicle_id ?? "",
         </span>
 
         <span>
-          GTB Auto Detailing POS
+          GTB Auto Detailing & Window Film POS
         </span>
       </footer>
     </main>

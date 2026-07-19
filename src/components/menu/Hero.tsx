@@ -21,7 +21,7 @@ type PublicBusinessProfile = {
 };
 
 const defaultProfile: PublicBusinessProfile = {
-  store_name: "GTB Auto Detailing",
+  store_name: "GTB Auto Detailing & Window Film",
   store_subtitle:
     "Professional Auto Detailing & Car Wash",
   logo_url: "",
