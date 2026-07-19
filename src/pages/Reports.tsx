@@ -40,8 +40,11 @@ type Order = {
 type OrderItem = {
   id: number;
   order_id: number;
+
   service_id: number | null;
   product_id: number | null;
+  package_id: number | null;
+
   quantity: number | string;
   unit_price: number | string;
   discount: number | string;
@@ -50,6 +53,11 @@ type OrderItem = {
 type ServiceLookup = {
   id: number;
   service_name: string;
+};
+type PackageLookup = {
+  id: number;
+  package_name: string;
+  package_name_en?: string | null;
 };
 type DailyRevenue = {
   date: string;
@@ -103,10 +111,14 @@ function Reports() {
   const [summaryOrders, setSummaryOrders] =
     useState<Order[]>([]);
 
-  const [orderItems, setOrderItems] = useState<
-    OrderItem[]
-  >([]);
+const [orderItems, setOrderItems] = useState<
+  OrderItem[]
+>([]);
+
 const [serviceNames, setServiceNames] =
+  useState<Record<number, string>>({});
+
+const [packageNames, setPackageNames] =
   useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -245,35 +257,38 @@ vehicle_id,
       );
 
       if (orderIds.length === 0) {
-        setOrderItems([]);
-        return;
-      }
+  setOrderItems([]);
+  setServiceNames({});
+  setPackageNames({});
+  return;
+}
 
-      const { data: itemsData, error: itemsError } =
-        await supabase
-          .from("order_items")
-          .select(
-  `
-  id,
-  order_id,
-  service_id,
-  product_id,
-  quantity,
-  unit_price,
-  discount,
-  total
-`
-)
-          .in("order_id", orderIds)
-          .order("id", {
-            ascending: true,
-          });
+const {
+  data: itemsData,
+  error: itemsError,
+} = await supabase
+  .from("order_items")
+  .select(`
+    id,
+    order_id,
+    service_id,
+    product_id,
+    package_id,
+    quantity,
+    unit_price,
+    discount,
+    total
+  `)
+  .in("order_id", orderIds)
+  .order("id", {
+    ascending: true,
+  });
 
-      if (itemsError) {
-        throw itemsError;
-      }
+if (itemsError) {
+  throw itemsError;
+}
 
-      const loadedItems =
+const loadedItems =
   (itemsData ?? []) as OrderItem[];
 
 setOrderItems(loadedItems);
@@ -282,6 +297,17 @@ const serviceIds = Array.from(
   new Set(
     loadedItems
       .map((item) => item.service_id)
+      .filter(
+        (id): id is number =>
+          id !== null
+      )
+  )
+);
+
+const packageIds = Array.from(
+  new Set(
+    loadedItems
+      .map((item) => item.package_id)
       .filter(
         (id): id is number =>
           id !== null
@@ -302,10 +328,8 @@ if (serviceIds.length > 0) {
     throw servicesError;
   }
 
-  const serviceMap: Record<
-    number,
-    string
-  > = {};
+  const serviceMap: Record<number, string> =
+    {};
 
   (
     (servicesData ?? []) as ServiceLookup[]
@@ -317,6 +341,38 @@ if (serviceIds.length > 0) {
   setServiceNames(serviceMap);
 } else {
   setServiceNames({});
+}
+
+if (packageIds.length > 0) {
+  const {
+    data: packagesData,
+    error: packagesError,
+  } = await supabase
+    .from("packages")
+    .select(`
+      id,
+      package_name,
+      package_name_en
+    `)
+    .in("id", packageIds);
+
+  if (packagesError) {
+    throw packagesError;
+  }
+
+  const packageMap: Record<number, string> =
+    {};
+
+  (
+    (packagesData ?? []) as PackageLookup[]
+  ).forEach((packageItem) => {
+    packageMap[packageItem.id] =
+      packageItem.package_name;
+  });
+
+  setPackageNames(packageMap);
+} else {
+  setPackageNames({});
 }
     } catch (reportError) {
       console.error(
@@ -466,12 +522,17 @@ if (serviceIds.length > 0) {
         return;
       }
 
-      const name = item.service_id
-  ? serviceNames[item.service_id] ??
-    `服务 #${item.service_id}`
-  : item.product_id
-    ? `产品 #${item.product_id}`
-    : "其他项目";
+const name = item.package_id
+  ? `🔥 ${
+      packageNames[item.package_id] ??
+      `套餐 #${item.package_id}`
+    }`
+  : item.service_id
+    ? serviceNames[item.service_id] ??
+      `服务 #${item.service_id}`
+    : item.product_id
+      ? `产品 #${item.product_id}`
+      : "其他项目";
 
       const current = map.get(name) ?? {
         name,
@@ -496,10 +557,11 @@ if (serviceIds.length > 0) {
           b.quantity - a.quantity
       )
       .slice(0, 8);
-  }, [
+}, [
   orderItems,
   revenueOrders,
   serviceNames,
+  packageNames,
 ]);
 
   const todayRevenue = useMemo(() => {
