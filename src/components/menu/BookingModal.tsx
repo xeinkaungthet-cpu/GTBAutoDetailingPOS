@@ -115,15 +115,15 @@ function BookingModal({
       return;
     }
 
-    if (!email.trim()) {
-      alert("请输入 Email");
-      return;
-    }
+    const trimmedEmail = email.trim();
 
     const emailRegex =
       /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-    if (!emailRegex.test(email.trim())) {
+    if (
+      trimmedEmail &&
+      !emailRegex.test(trimmedEmail)
+    ) {
       alert("Email 格式不正确");
       return;
     }
@@ -196,7 +196,7 @@ function BookingModal({
             appointment_no: appointmentNo,
             customer_name: customerName.trim(),
             phone: phone.trim(),
-            email: email.trim(),
+            email: trimmedEmail,
 
             vehicle_plate: vehiclePlate.trim(),
             vehicle_model: vehicleModel.trim(),
@@ -236,7 +236,7 @@ function BookingModal({
 
           customerName: customerName.trim(),
           phone: phone.trim(),
-          email: email.trim(),
+          email: trimmedEmail,
 
           vehiclePlate: vehiclePlate.trim(),
           vehicleModel: vehicleModel.trim(),
@@ -419,7 +419,9 @@ function BookingModal({
           </label>
 
           <label style={field}>
-            <span style={label}>Email *</span>
+            <span style={label}>
+              Email（选填） / Optional
+            </span>
 
             <input
               type="email"
@@ -427,7 +429,7 @@ function BookingModal({
               onChange={(event) =>
                 setEmail(event.target.value)
               }
-              placeholder="customer@email.com"
+              placeholder="可不填写 / Optional"
               style={input}
               disabled={loading}
             />
