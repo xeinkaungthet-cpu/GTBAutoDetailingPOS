@@ -11,15 +11,17 @@ export interface PackageServiceItem {
 
 export interface Package {
   id: number;
+
   package_name: string;
   package_name_en?: string | null;
 
   description?: string | null;
   description_en?: string | null;
 
-  original_price: number;
-  package_price: number;
-  estimated_minutes: number;
+  original_price: number | string;
+  package_price: number | string;
+  cost_price: number | string;
+  estimated_minutes: number | string;
 
   image_url?: string | null;
 
@@ -41,6 +43,7 @@ export type PackagePayload = {
 
   original_price: number;
   package_price: number;
+  cost_price: number;
   estimated_minutes: number;
 
   image_url?: string | null;
@@ -49,23 +52,114 @@ export type PackagePayload = {
   is_popular: boolean;
 };
 
+const packageSelect = `
+  *,
+  package_services (
+    id,
+    package_id,
+    service_id,
+    sort_order,
+    services (*)
+  )
+`;
+
+function normalizeServiceIds(serviceIds: number[]) {
+  return Array.from(
+    new Set(
+      serviceIds
+        .map((serviceId) => Number(serviceId))
+        .filter(
+          (serviceId) =>
+            Number.isInteger(serviceId) && serviceId > 0
+        )
+    )
+  );
+}
+
+function validatePackagePayload(
+  packageData: Partial<PackagePayload>
+) {
+  if (
+    packageData.package_price !== undefined &&
+    (!Number.isFinite(Number(packageData.package_price)) ||
+      Number(packageData.package_price) <= 0)
+  ) {
+    throw new Error("套餐价格必须大于 0");
+  }
+
+  if (
+    packageData.cost_price !== undefined &&
+    (!Number.isFinite(Number(packageData.cost_price)) ||
+      Number(packageData.cost_price) < 0)
+  ) {
+    throw new Error("套餐内部成本不能小于 0");
+  }
+
+  if (
+    packageData.original_price !== undefined &&
+    (!Number.isFinite(Number(packageData.original_price)) ||
+      Number(packageData.original_price) < 0)
+  ) {
+    throw new Error("服务原价不能小于 0");
+  }
+
+  if (
+    packageData.estimated_minutes !== undefined &&
+    (!Number.isFinite(Number(packageData.estimated_minutes)) ||
+      Number(packageData.estimated_minutes) < 0)
+  ) {
+    throw new Error("预计时间不能小于 0");
+  }
+}
+
+async function replacePackageServices(
+  packageId: number,
+  serviceIds: number[]
+) {
+  const normalizedIds = normalizeServiceIds(serviceIds);
+
+  const { error: deleteLinksError } = await supabase
+    .from("package_services")
+    .delete()
+    .eq("package_id", packageId);
+
+  if (deleteLinksError) {
+    throw deleteLinksError;
+  }
+
+  if (normalizedIds.length === 0) {
+    return;
+  }
+
+  const packageServices = normalizedIds.map(
+    (serviceId, index) => ({
+      package_id: packageId,
+      service_id: serviceId,
+      sort_order: index,
+    })
+  );
+
+  const { error: insertLinksError } = await supabase
+    .from("package_services")
+    .insert(packageServices);
+
+  if (insertLinksError) {
+    throw insertLinksError;
+  }
+}
+
 export const PackageService = {
   async getAll(): Promise<Package[]> {
     const { data, error } = await supabase
       .from("packages")
-      .select(`
-        *,
-        package_services (
-          id,
-          package_id,
-          service_id,
-          sort_order,
-          services (*)
-        )
-      `)
-      .order("created_at", { ascending: false });
+      .select(packageSelect)
+      .order("created_at", {
+        ascending: false,
+      });
 
-    if (error) throw error;
+    if (error) {
+      throw error;
+    }
 
     return (data ?? []) as Package[];
   },
@@ -73,21 +167,18 @@ export const PackageService = {
   async getActive(): Promise<Package[]> {
     const { data, error } = await supabase
       .from("packages")
-      .select(`
-        *,
-        package_services (
-          id,
-          package_id,
-          service_id,
-          sort_order,
-          services (*)
-        )
-      `)
+      .select(packageSelect)
       .eq("is_active", true)
-      .order("is_popular", { ascending: false })
-      .order("package_price", { ascending: true });
+      .order("is_popular", {
+        ascending: false,
+      })
+      .order("package_price", {
+        ascending: true,
+      });
 
-    if (error) throw error;
+    if (error) {
+      throw error;
+    }
 
     return (data ?? []) as Package[];
   },
@@ -96,6 +187,14 @@ export const PackageService = {
     packageData: PackagePayload,
     serviceIds: number[]
   ): Promise<Package> {
+    validatePackagePayload(packageData);
+
+    const normalizedIds = normalizeServiceIds(serviceIds);
+
+    if (normalizedIds.length === 0) {
+      throw new Error("请至少选择一个服务项目");
+    }
+
     const { data: createdPackage, error: packageError } =
       await supabase
         .from("packages")
@@ -103,33 +202,28 @@ export const PackageService = {
         .select()
         .single();
 
-    if (packageError) throw packageError;
-
-    if (!createdPackage?.id) {
-      throw new Error("套餐创建失败：没有返回套餐 ID");
+    if (packageError) {
+      throw packageError;
     }
 
-    if (serviceIds.length > 0) {
-      const packageServices = serviceIds.map(
-        (serviceId, index) => ({
-          package_id: createdPackage.id,
-          service_id: serviceId,
-          sort_order: index,
-        })
+    if (!createdPackage?.id) {
+      throw new Error(
+        "套餐创建失败：系统没有返回套餐 ID"
       );
+    }
 
-      const { error: serviceError } = await supabase
-        .from("package_services")
-        .insert(packageServices);
+    try {
+      await replacePackageServices(
+        Number(createdPackage.id),
+        normalizedIds
+      );
+    } catch (error) {
+      await supabase
+        .from("packages")
+        .delete()
+        .eq("id", createdPackage.id);
 
-      if (serviceError) {
-        await supabase
-          .from("packages")
-          .delete()
-          .eq("id", createdPackage.id);
-
-        throw serviceError;
-      }
+      throw error;
     }
 
     return createdPackage as Package;
@@ -140,6 +234,23 @@ export const PackageService = {
     packageData: Partial<PackagePayload>,
     serviceIds: number[]
   ): Promise<Package> {
+    const normalizedPackageId = Number(packageId);
+
+    if (
+      !Number.isInteger(normalizedPackageId) ||
+      normalizedPackageId <= 0
+    ) {
+      throw new Error("套餐编号不正确");
+    }
+
+    validatePackagePayload(packageData);
+
+    const normalizedIds = normalizeServiceIds(serviceIds);
+
+    if (normalizedIds.length === 0) {
+      throw new Error("请至少选择一个服务项目");
+    }
+
     const { data: updatedPackage, error: packageError } =
       await supabase
         .from("packages")
@@ -147,34 +258,18 @@ export const PackageService = {
           ...packageData,
           updated_at: new Date().toISOString(),
         })
-        .eq("id", packageId)
+        .eq("id", normalizedPackageId)
         .select()
         .single();
 
-    if (packageError) throw packageError;
-
-    const { error: deleteLinksError } = await supabase
-      .from("package_services")
-      .delete()
-      .eq("package_id", packageId);
-
-    if (deleteLinksError) throw deleteLinksError;
-
-    if (serviceIds.length > 0) {
-      const packageServices = serviceIds.map(
-        (serviceId, index) => ({
-          package_id: packageId,
-          service_id: serviceId,
-          sort_order: index,
-        })
-      );
-
-      const { error: insertLinksError } = await supabase
-        .from("package_services")
-        .insert(packageServices);
-
-      if (insertLinksError) throw insertLinksError;
+    if (packageError) {
+      throw packageError;
     }
+
+    await replacePackageServices(
+      normalizedPackageId,
+      normalizedIds
+    );
 
     return updatedPackage as Package;
   },
@@ -183,30 +278,61 @@ export const PackageService = {
     packageId: number,
     isActive: boolean
   ): Promise<void> {
+    const normalizedPackageId = Number(packageId);
+
+    if (
+      !Number.isInteger(normalizedPackageId) ||
+      normalizedPackageId <= 0
+    ) {
+      throw new Error("套餐编号不正确");
+    }
+
     const { error } = await supabase
       .from("packages")
       .update({
         is_active: isActive,
         updated_at: new Date().toISOString(),
       })
-      .eq("id", packageId);
+      .eq("id", normalizedPackageId);
 
-    if (error) throw error;
+    if (error) {
+      throw error;
+    }
   },
 
   async delete(packageId: number): Promise<void> {
+    const normalizedPackageId = Number(packageId);
+
+    if (
+      !Number.isInteger(normalizedPackageId) ||
+      normalizedPackageId <= 0
+    ) {
+      throw new Error("套餐编号不正确");
+    }
+
     const { error } = await supabase
       .from("packages")
       .delete()
-      .eq("id", packageId);
+      .eq("id", normalizedPackageId);
 
-    if (error) throw error;
+    if (error) {
+      throw error;
+    }
   },
 
   async uploadImage(
     packageId: number,
     file: File
   ): Promise<string> {
+    const normalizedPackageId = Number(packageId);
+
+    if (
+      !Number.isInteger(normalizedPackageId) ||
+      normalizedPackageId <= 0
+    ) {
+      throw new Error("套餐编号不正确");
+    }
+
     if (!file.type.startsWith("image/")) {
       throw new Error("请选择图片文件");
     }
@@ -216,23 +342,27 @@ export const PackageService = {
     }
 
     const extension =
-      file.name.split(".").pop()?.toLowerCase() || "jpg";
+      file.name.split(".").pop()?.toLowerCase() ||
+      "jpg";
 
     const safeExtension =
       extension.replace(/[^a-z0-9]/g, "") || "jpg";
 
     const filePath =
-      `${packageId}/package-${Date.now()}.${safeExtension}`;
+      `${normalizedPackageId}/package-${Date.now()}.${safeExtension}`;
 
-    const { error: uploadError } = await supabase.storage
-      .from("service-images")
-      .upload(filePath, file, {
-        cacheControl: "3600",
-        upsert: false,
-        contentType: file.type,
-      });
+    const { error: uploadError } =
+      await supabase.storage
+        .from("service-images")
+        .upload(filePath, file, {
+          cacheControl: "3600",
+          upsert: false,
+          contentType: file.type,
+        });
 
-    if (uploadError) throw uploadError;
+    if (uploadError) {
+      throw uploadError;
+    }
 
     const { data } = supabase.storage
       .from("service-images")
@@ -245,14 +375,25 @@ export const PackageService = {
     packageId: number,
     imageUrl: string | null
   ): Promise<void> {
+    const normalizedPackageId = Number(packageId);
+
+    if (
+      !Number.isInteger(normalizedPackageId) ||
+      normalizedPackageId <= 0
+    ) {
+      throw new Error("套餐编号不正确");
+    }
+
     const { error } = await supabase
       .from("packages")
       .update({
         image_url: imageUrl,
         updated_at: new Date().toISOString(),
       })
-      .eq("id", packageId);
+      .eq("id", normalizedPackageId);
 
-    if (error) throw error;
+    if (error) {
+      throw error;
+    }
   },
 };

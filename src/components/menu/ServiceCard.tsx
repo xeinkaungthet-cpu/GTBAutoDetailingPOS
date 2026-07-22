@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Service } from "../../types/database";
-import { formatCurrency } from "../../utils/currency";
+import useCurrency from "../../hooks/useCurrency";
 
 type Props = {
   service: Service;
@@ -8,6 +8,8 @@ type Props = {
 };
 
 function ServiceCard({ service, onBook }: Props) {
+  const { formatMoney, currentOption, accountingOption } = useCurrency();
+
   const isAvailable = service.is_active !== false;
 
   const [beforeImageFailed, setBeforeImageFailed] =
@@ -227,8 +229,12 @@ function ServiceCard({ service, onBook }: Props) {
     </p>
 
     <strong style={price}>
-      {formatCurrency(service.price)}
+      {formatMoney(Number(service.price) || 0)}
     </strong>
+
+    <span style={currencyHint}>
+      {currentOption.code} · 账本 {accountingOption.code}
+    </span>
   </div>
 
   <button
@@ -606,6 +612,15 @@ const price = {
   fontSize: 28,
   lineHeight: 1.1,
   fontWeight: 900,
+};
+
+
+const currencyHint = {
+  display: "block",
+  marginTop: 6,
+  color: "#94a3b8",
+  fontSize: 10,
+  fontWeight: 750,
 };
 
 const bookButton = {

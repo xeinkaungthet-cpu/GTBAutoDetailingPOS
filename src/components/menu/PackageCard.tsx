@@ -1,5 +1,5 @@
 import type { Package } from "../../services/packageService";
-import { formatCurrency } from "../../utils/currency";
+import useCurrency from "../../hooks/useCurrency";
 
 type Props = {
   packageItem: Package;
@@ -10,6 +10,11 @@ function PackageCard({
   packageItem,
   onBook,
 }: Props) {
+  const {
+    formatMoney,
+    displayCurrency,
+  } = useCurrency();
+
   const includedServices =
     packageItem.package_services
       ?.map((item) => item.services)
@@ -99,30 +104,34 @@ function PackageCard({
           )}
         </div>
 
-<div style={metaRow}>
-  <span style={status}>
-    可预约 / Available
-  </span>
-</div>
+        <div style={metaRow}>
+          <span style={currencyBadge}>
+            显示货币 / Display: {displayCurrency}
+          </span>
+
+          <span style={status}>
+            可预约 / Available
+          </span>
+        </div>
 
         <div style={footer}>
           <div>
             <span style={originalPrice}>
               原价{" "}
-              {formatCurrency(
-                packageItem.original_price
+              {formatMoney(
+                Number(packageItem.original_price || 0)
               )}
             </span>
 
             <strong style={packagePrice}>
-              {formatCurrency(
-                packageItem.package_price
+              {formatMoney(
+                Number(packageItem.package_price || 0)
               )}
             </strong>
 
             {savings > 0 && (
               <span style={savingText}>
-                节省 {formatCurrency(savings)}
+                节省 {formatMoney(savings)}
               </span>
             )}
           </div>
@@ -277,12 +286,21 @@ const emptyText = {
 
 const metaRow = {
   display: "flex",
-  justifyContent: "flex-end",
+  justifyContent: "space-between",
   alignItems: "center",
   gap: 12,
   marginTop: 16,
+  flexWrap: "wrap" as const,
 };
 
+const currencyBadge = {
+  padding: "6px 9px",
+  borderRadius: 999,
+  background: "#eff6ff",
+  color: "#1d4ed8",
+  fontSize: 10,
+  fontWeight: 900,
+};
 
 const status = {
   padding: "6px 9px",

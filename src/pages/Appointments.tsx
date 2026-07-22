@@ -7,7 +7,7 @@ import type {
 
 import { AppointmentService } from "../services/appointmentService";
 import { ServiceService } from "../services/serviceService";
-import { formatCurrency } from "../utils/currency";
+import useCurrency from "../hooks/useCurrency";
 
 const statusOptions = [
   {
@@ -43,6 +43,14 @@ const statusOptions = [
 ];
 
 function Appointments() {
+  const {
+    formatMoney: formatDisplayMoney,
+    displayCurrency,
+    accountingCurrency,
+    loading: currencyLoading,
+    error: currencyError,
+  } = useCurrency();
+
   const [appointments, setAppointments] =
     useState<Appointment[]>([]);
 
@@ -234,6 +242,30 @@ function Appointments() {
             ? "载入中..."
             : "↻ 刷新预约"}
         </button>
+      </div>
+
+      <div style={currencyInfoCard}>
+        <div>
+          <strong style={currencyInfoTitle}>
+            显示货币 / Display Currency
+          </strong>
+          <p style={currencyInfoText}>
+            当前价格以 {displayCurrency} 显示，账本基础货币为{" "}
+            {accountingCurrency}。
+          </p>
+        </div>
+
+        <span style={currencyBadge}>
+          {currencyLoading
+            ? "读取汇率..."
+            : `${displayCurrency} ← ${accountingCurrency}`}
+        </span>
+
+        {currencyError && (
+          <p style={currencyErrorText}>
+            汇率读取失败：{currencyError}
+          </p>
+        )}
       </div>
 
       <div style={summaryGrid}>
@@ -444,8 +476,8 @@ function Appointments() {
                             <strong
                               style={servicePrice}
                             >
-                              {formatCurrency(
-                                service.price
+                              {formatDisplayMoney(
+                                Number(service.price || 0)
                               )}
                             </strong>
                           </div>
@@ -465,7 +497,7 @@ function Appointments() {
                       </span>
 
                       <strong>
-                        {formatCurrency(
+                        {formatDisplayMoney(
                           appointmentTotal
                         )}
                       </strong>
@@ -717,6 +749,49 @@ const refreshButton = {
   color: "#374151",
   cursor: "pointer",
   fontWeight: 800,
+};
+
+const currencyInfoCard = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  flexWrap: "wrap" as const,
+  gap: 14,
+  marginBottom: 18,
+  padding: "15px 18px",
+  border: "1px solid #bfdbfe",
+  borderRadius: 15,
+  background: "#eff6ff",
+};
+
+const currencyInfoTitle = {
+  color: "#1e3a8a",
+  fontSize: 13,
+};
+
+const currencyInfoText = {
+  margin: "5px 0 0",
+  color: "#3b5998",
+  fontSize: 12,
+  lineHeight: 1.5,
+};
+
+const currencyBadge = {
+  padding: "7px 11px",
+  borderRadius: 999,
+  background: "#ffffff",
+  color: "#1d4ed8",
+  fontSize: 11,
+  fontWeight: 900,
+  border: "1px solid #bfdbfe",
+};
+
+const currencyErrorText = {
+  width: "100%",
+  margin: 0,
+  color: "#b91c1c",
+  fontSize: 12,
+  fontWeight: 700,
 };
 
 const summaryGrid = {

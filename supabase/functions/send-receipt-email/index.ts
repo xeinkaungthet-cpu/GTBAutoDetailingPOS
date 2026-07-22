@@ -3,6 +3,14 @@ import "@supabase/functions-js/edge-runtime.d.ts";
 const RESEND_API_KEY =
   Deno.env.get("RESEND_API_KEY");
 
+const SUPABASE_URL =
+  Deno.env.get("SUPABASE_URL");
+
+const SUPABASE_SERVICE_ROLE_KEY =
+  Deno.env.get(
+    "SUPABASE_SERVICE_ROLE_KEY",
+  );
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -60,19 +68,240 @@ function escapeHtml(
     .replaceAll("'", "&#039;");
 }
 
-function formatMoney(
-  value: unknown
-): string {
-  const numberValue =
-    Number(value) || 0;
+type CurrencyCode =
+  | "USD"
+  | "MMK"
+  | "CNY";
 
-  return `￥${numberValue.toLocaleString(
-    "en-US",
-    {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
+type CurrencySettings = {
+  accountingCurrency: CurrencyCode;
+  displayCurrency: CurrencyCode;
+  usdRate: number;
+  mmkRate: number;
+  cnyRate: number;
+};
+
+const DEFAULT_CURRENCY_SETTINGS: CurrencySettings =
+  {
+    accountingCurrency: "USD",
+    displayCurrency: "USD",
+    usdRate: 1,
+    mmkRate: 1,
+    cnyRate: 1,
+  };
+
+function normalizeCurrencyCode(
+  value: unknown,
+  fallback: CurrencyCode,
+): CurrencyCode {
+  const normalized = String(
+    value ?? "",
+  )
+    .trim()
+    .toUpperCase();
+
+  if (
+    normalized === "USD" ||
+    normalized === "MMK" ||
+    normalized === "CNY"
+  ) {
+    return normalized;
+  }
+
+  return fallback;
+}
+
+function normalizePositiveRate(
+  value: unknown,
+  fallback: number,
+): number {
+  const numberValue = Number(value);
+
+  return Number.isFinite(numberValue) &&
+    numberValue > 0
+    ? numberValue
+    : fallback;
+}
+
+function getCurrencyRate(
+  currency: CurrencyCode,
+  settings: CurrencySettings,
+): number {
+  if (currency === "MMK") {
+    return normalizePositiveRate(
+      settings.mmkRate,
+      1,
+    );
+  }
+
+  if (currency === "CNY") {
+    return normalizePositiveRate(
+      settings.cnyRate,
+      1,
+    );
+  }
+
+  return normalizePositiveRate(
+    settings.usdRate,
+    1,
+  );
+}
+
+function convertMoney(
+  value: unknown,
+  settings: CurrencySettings,
+): number {
+  const amount = Number(value) || 0;
+
+  const accountingRate = getCurrencyRate(
+    settings.accountingCurrency,
+    settings,
+  );
+
+  const displayRate = getCurrencyRate(
+    settings.displayCurrency,
+    settings,
+  );
+
+  return (
+    amount /
+    accountingRate *
+    displayRate
+  );
+}
+
+function formatMoney(
+  value: unknown,
+  settings: CurrencySettings,
+): string {
+  const convertedValue = convertMoney(
+    value,
+    settings,
+  );
+
+  const fractionDigits =
+    settings.displayCurrency === "MMK"
+      ? 0
+      : 2;
+
+  const formatted =
+    convertedValue.toLocaleString(
+      "en-US",
+      {
+        minimumFractionDigits:
+          fractionDigits,
+        maximumFractionDigits:
+          fractionDigits,
+      },
+    );
+
+  if (
+    settings.displayCurrency === "MMK"
+  ) {
+    return `Ks ${formatted}`;
+  }
+
+  if (
+    settings.displayCurrency === "CNY"
+  ) {
+    return `¥${formatted}`;
+  }
+
+  return `$${formatted}`;
+}
+
+async function loadCurrencySettings(): Promise<CurrencySettings> {
+  if (
+    !SUPABASE_URL ||
+    !SUPABASE_SERVICE_ROLE_KEY
+  ) {
+    console.warn(
+      "Currency settings fallback: missing Supabase environment variables.",
+    );
+
+    return {
+      ...DEFAULT_CURRENCY_SETTINGS,
+    };
+  }
+
+  try {
+    const response = await fetch(
+      `${SUPABASE_URL}/rest/v1/business_settings?select=accounting_currency,display_currency,usd_rate,mmk_rate,cny_rate&limit=1`,
+      {
+        headers: {
+          apikey:
+            SUPABASE_SERVICE_ROLE_KEY,
+          Authorization:
+            `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          "Content-Type":
+            "application/json",
+        },
+      },
+    );
+
+    if (!response.ok) {
+      console.warn(
+        "Currency settings request failed:",
+        response.status,
+        await response.text(),
+      );
+
+      return {
+        ...DEFAULT_CURRENCY_SETTINGS,
+      };
     }
-  )}`;
+
+    const rows =
+      (await response.json()) as Array<
+        Record<string, unknown>
+      >;
+
+    const row = rows[0];
+
+    if (!row) {
+      console.warn(
+        "Currency settings fallback: business_settings is empty.",
+      );
+
+      return {
+        ...DEFAULT_CURRENCY_SETTINGS,
+      };
+    }
+
+    return {
+      accountingCurrency:
+        normalizeCurrencyCode(
+          row.accounting_currency,
+          "USD",
+        ),
+      displayCurrency:
+        normalizeCurrencyCode(
+          row.display_currency,
+          "USD",
+        ),
+      usdRate: normalizePositiveRate(
+        row.usd_rate,
+        1,
+      ),
+      mmkRate: normalizePositiveRate(
+        row.mmk_rate,
+        1,
+      ),
+      cnyRate: normalizePositiveRate(
+        row.cny_rate,
+        1,
+      ),
+    };
+  } catch (error) {
+    console.warn(
+      "Currency settings fallback:",
+      error,
+    );
+
+    return {
+      ...DEFAULT_CURRENCY_SETTINGS,
+    };
+  }
 }
 
 function getPaymentName(
@@ -86,6 +315,10 @@ function getPaymentName(
     card: "银行卡 / Card",
     transfer:
       "银行转账 / Bank Transfer",
+    bank_transfer:
+      "银行转账 / Bank Transfer",
+    tng:
+      "Touch 'n Go",
     qr: "二维码支付 / QR Payment",
   };
 
@@ -97,7 +330,8 @@ function getPaymentName(
 }
 
 function buildItemsHtml(
-  items: ReceiptItem[]
+  items: ReceiptItem[],
+  currencySettings: CurrencySettings,
 ): string {
   return items
     .map((item) => {
@@ -207,7 +441,10 @@ function buildItemsHtml(
               white-space: nowrap;
             "
           >
-            ${formatMoney(item.unitPrice)}
+            ${formatMoney(
+              item.unitPrice,
+              currencySettings,
+            )}
           </td>
 
           <td
@@ -221,7 +458,10 @@ function buildItemsHtml(
               white-space: nowrap;
             "
           >
-            ${formatMoney(item.total)}
+            ${formatMoney(
+              item.total,
+              currencySettings,
+            )}
           </td>
         </tr>
       `;
@@ -230,7 +470,8 @@ function buildItemsHtml(
 }
 
 function buildReceiptHtml(
-  payload: ReceiptRequest
+  payload: ReceiptRequest,
+  currencySettings: CurrencySettings,
 ): string {
   const { order, items } = payload;
 
@@ -484,6 +725,30 @@ function buildReceiptHtml(
                     )}
                   </td>
                 </tr>
+
+                <tr>
+                  <td
+                    style="
+                      padding: 0 14px 14px;
+                      color: #64748b;
+                      font-size: 13px;
+                    "
+                  >
+                    显示货币 / Currency
+                  </td>
+
+                  <td
+                    align="right"
+                    style="
+                      padding: 0 14px 14px;
+                      font-weight: 700;
+                    "
+                  >
+                    ${escapeHtml(
+                      currencySettings.displayCurrency
+                    )}
+                  </td>
+                </tr>
               </table>
 
               <table
@@ -534,7 +799,10 @@ function buildReceiptHtml(
                 </thead>
 
                 <tbody>
-                  ${buildItemsHtml(items)}
+                  ${buildItemsHtml(
+                    items,
+                    currencySettings,
+                  )}
                 </tbody>
               </table>
 
@@ -564,7 +832,8 @@ function buildReceiptHtml(
                     style="padding: 6px"
                   >
                     ${formatMoney(
-                      order.subtotal
+                      order.subtotal,
+                      currencySettings,
                     )}
                   </td>
                 </tr>
@@ -585,7 +854,8 @@ function buildReceiptHtml(
                     style="padding: 6px"
                   >
                     -${formatMoney(
-                      order.discount
+                      order.discount,
+                      currencySettings,
                     )}
                   </td>
                 </tr>
@@ -611,10 +881,40 @@ function buildReceiptHtml(
                       font-weight: 800;
                     "
                   >
-                    ${formatMoney(order.total)}
+                    ${formatMoney(
+                      order.total,
+                      currencySettings,
+                    )}
                   </td>
                 </tr>
               </table>
+
+              <div
+                style="
+                  margin-top: 14px;
+                  padding: 12px 14px;
+                  border-radius: 10px;
+                  background: #eff6ff;
+                  color: #475569;
+                  font-size: 12px;
+                  line-height: 1.6;
+                  text-align: center;
+                "
+              >
+                金额以
+                <strong>
+                  ${escapeHtml(
+                    currencySettings.displayCurrency
+                  )}
+                </strong>
+                显示；账本基础货币为
+                <strong>
+                  ${escapeHtml(
+                    currencySettings.accountingCurrency
+                  )}
+                </strong>
+                。数据库中的订单原始金额没有被修改。
+              </div>
 
               <div
                 style="
@@ -740,6 +1040,9 @@ Deno.serve(async (request) => {
       );
     }
 
+    const currencySettings =
+      await loadCurrencySettings();
+
     const resendResponse = await fetch(
       "https://api.resend.com/emails",
       {
@@ -765,10 +1068,13 @@ Deno.serve(async (request) => {
           ],
 
           subject:
-            `GTB 收据 / Receipt ${payload.order.orderNo}`,
+            `GTB 收据 / Receipt ${payload.order.orderNo} (${currencySettings.displayCurrency})`,
 
           html:
-            buildReceiptHtml(payload),
+            buildReceiptHtml(
+              payload,
+              currencySettings,
+            ),
         }),
       }
     );
@@ -807,6 +1113,10 @@ Deno.serve(async (request) => {
         success: true,
         message: "收据邮件发送成功",
         emailId: resendResult.id,
+        displayCurrency:
+          currencySettings.displayCurrency,
+        accountingCurrency:
+          currencySettings.accountingCurrency,
       }),
       {
         status: 200,

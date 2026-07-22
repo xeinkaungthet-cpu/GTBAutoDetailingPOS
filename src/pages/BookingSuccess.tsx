@@ -1,12 +1,20 @@
 import { useLocation, useNavigate } from "react-router-dom";
+import useCurrency from "../hooks/useCurrency";
 
 type BookingSuccessState = {
   appointmentNo?: string;
   serviceName?: string;
+  serviceNameEn?: string;
+  bookingType?: "service" | "package";
+  bookingPrice?: number;
+  bookingDisplayPrice?: string;
+  displayCurrency?: string;
+  accountingCurrency?: string;
   appointmentDate?: string;
   appointmentTime?: string;
   customerName?: string;
   phone?: string;
+  email?: string;
   vehiclePlate?: string;
   vehicleModel?: string;
 };
@@ -15,10 +23,41 @@ function BookingSuccess() {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const {
+    formatMoney: formatDisplayMoney,
+    displayCurrency: currentDisplayCurrency,
+    accountingCurrency: currentAccountingCurrency,
+    error: currencyError,
+  } = useCurrency();
+
   const booking =
     (location.state as BookingSuccessState | null) ?? {};
 
   const hasBooking = Boolean(booking.appointmentNo);
+
+  const numericBookingPrice = Number(
+    booking.bookingPrice
+  );
+
+  const formattedBookingPrice =
+    Number.isFinite(numericBookingPrice)
+      ? formatDisplayMoney(numericBookingPrice)
+      : booking.bookingDisplayPrice || "-";
+
+  const resolvedDisplayCurrency =
+    currentDisplayCurrency ||
+    booking.displayCurrency ||
+    "USD";
+
+  const resolvedAccountingCurrency =
+    currentAccountingCurrency ||
+    booking.accountingCurrency ||
+    "USD";
+
+  const bookingTypeLabel =
+    booking.bookingType === "package"
+      ? "套餐 / Package"
+      : "服务 / Service";
 
   async function copyAppointmentNumber() {
     if (!booking.appointmentNo) return;
@@ -42,17 +81,27 @@ function BookingSuccess() {
       "Appointment Confirmation",
       "",
       `预约编号：${booking.appointmentNo}`,
+      `预约类型：${bookingTypeLabel}`,
       `服务：${booking.serviceName || "-"}`,
+      booking.serviceNameEn
+        ? `English: ${booking.serviceNameEn}`
+        : "",
+      `预约价格：${formattedBookingPrice}`,
+      `显示货币：${resolvedDisplayCurrency}`,
+      `账本货币：${resolvedAccountingCurrency}`,
       `预约日期：${formatDate(booking.appointmentDate)}`,
       `预约时间：${formatTime(booking.appointmentTime)}`,
       `客户：${booking.customerName || "-"}`,
       `电话：${booking.phone || "-"}`,
+      `Email：${booking.email || "-"}`,
       `车牌：${booking.vehiclePlate || "-"}`,
       `车型：${booking.vehicleModel || "-"}`,
       `状态：等待确认`,
       "",
       "门店工作人员将尽快联系您确认预约。",
-    ].join("\n");
+    ]
+      .filter(Boolean)
+      .join("\n");
 
     const blob = new Blob([content], {
       type: "text/plain;charset=utf-8",
@@ -103,7 +152,13 @@ function BookingSuccess() {
         booking.serviceName || "GTB Auto Detailing & Window Film Appointment"
       )}`,
       `DESCRIPTION:${escapeCalendarText(
-        `预约编号：${booking.appointmentNo || "-"}`
+        [
+          `预约编号：${booking.appointmentNo || "-"}`,
+          `预约类型：${bookingTypeLabel}`,
+          `项目：${booking.serviceName || "-"}`,
+          `价格：${formattedBookingPrice}`,
+          `联系电话：${booking.phone || "-"}`,
+        ].join("\n")
       )}`,
       "STATUS:TENTATIVE",
       "END:VEVENT",
@@ -221,11 +276,49 @@ function BookingSuccess() {
           <div style={ticketDivider} />
 
           <div style={serviceBlock}>
-            <p style={ticketLabel}>SELECTED SERVICE</p>
+            <p style={ticketLabel}>
+              {booking.bookingType === "package"
+                ? "SELECTED PACKAGE"
+                : "SELECTED SERVICE"}
+            </p>
 
             <h2 style={serviceName}>
               {booking.serviceName || "汽车美容服务"}
             </h2>
+
+            {booking.serviceNameEn && (
+              <p style={serviceNameEnglish}>
+                {booking.serviceNameEn}
+              </p>
+            )}
+
+            <div style={bookingPriceRow}>
+              <span style={bookingTypePill}>
+                {bookingTypeLabel}
+              </span>
+
+              <div style={priceSummary}>
+                <span style={priceSummaryLabel}>
+                  预约价格 / Booking Price
+                </span>
+
+                <strong style={bookingPriceValue}>
+                  {formattedBookingPrice}
+                </strong>
+
+                <small style={currencyMeta}>
+                  显示货币：{resolvedDisplayCurrency}
+                  {" · "}
+                  账本货币：{resolvedAccountingCurrency}
+                </small>
+              </div>
+            </div>
+
+            {currencyError && (
+              <p style={currencyWarning}>
+                汇率读取失败，当前价格可能使用默认货币。
+              </p>
+            )}
           </div>
 
           <div style={informationGrid}>
@@ -256,6 +349,14 @@ function BookingSuccess() {
               value={booking.phone || "-"}
               icon="📱"
             />
+
+            {booking.email && (
+              <InformationItem
+                label="Email"
+                value={booking.email}
+                icon="✉️"
+              />
+            )}
 
             <InformationItem
               label="车辆车牌"
@@ -602,6 +703,74 @@ const serviceName = {
   color: "#111827",
   fontSize: 25,
   fontWeight: 750,
+};
+
+const serviceNameEnglish = {
+  margin: "5px 0 0",
+  color: "#64748b",
+  fontSize: 14,
+  fontWeight: 650,
+};
+
+const bookingPriceRow = {
+  display: "flex",
+  alignItems: "flex-end",
+  justifyContent: "space-between",
+  flexWrap: "wrap" as const,
+  gap: 14,
+  marginTop: 18,
+  padding: 16,
+  border: "1px solid #dbeafe",
+  borderRadius: 16,
+  background:
+    "linear-gradient(135deg,#eff6ff,#ffffff)",
+};
+
+const bookingTypePill = {
+  display: "inline-flex",
+  padding: "7px 11px",
+  borderRadius: 999,
+  background: "#ede9fe",
+  color: "#6d28d9",
+  fontSize: 11,
+  fontWeight: 900,
+};
+
+const priceSummary = {
+  display: "flex",
+  flexDirection: "column" as const,
+  alignItems: "flex-end",
+  minWidth: 0,
+};
+
+const priceSummaryLabel = {
+  color: "#64748b",
+  fontSize: 10,
+  fontWeight: 850,
+  letterSpacing: 0.5,
+};
+
+const bookingPriceValue = {
+  marginTop: 4,
+  color: "#2563eb",
+  fontSize: 28,
+  lineHeight: 1.1,
+  overflowWrap: "anywhere" as const,
+};
+
+const currencyMeta = {
+  marginTop: 6,
+  color: "#94a3b8",
+  fontSize: 10,
+};
+
+const currencyWarning = {
+  margin: "10px 0 0",
+  padding: "9px 11px",
+  borderRadius: 10,
+  background: "#fff7ed",
+  color: "#c2410c",
+  fontSize: 11,
 };
 
 const informationGrid = {

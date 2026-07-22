@@ -4,11 +4,11 @@ import {
   Route,
   Routes,
 } from "react-router-dom";
-
+import FollowUpAutomation from "../pages/FollowUpAutomation";
 import ProtectedRoute from "../components/ProtectedRoute";
 import PermissionRoute from "../components/PermissionRoute";
 import Sidebar from "../components/Sidebar";
-
+import Refunds from "../pages/Refunds";
 import Dashboard from "../pages/Dashboard";
 import POS from "../pages/POS";
 import Members from "../pages/Members";
@@ -18,6 +18,7 @@ import Products from "../pages/Products";
 import Packages from "../pages/Packages";
 import Orders from "../pages/Orders";
 import Reports from "../pages/Reports";
+import Expenses from "../pages/Expenses";
 import Employees from "../pages/Employees";
 import Settings from "../pages/Settings";
 import Appointments from "../pages/Appointments";
@@ -108,7 +109,10 @@ function AppRouter() {
           </ProtectedPage>
         }
       />
-
+<Route
+  path="/follow-up-automation"
+  element={<FollowUpAutomation />}
+/>
       <Route
         path="/pos"
         element={
@@ -180,7 +184,14 @@ function AppRouter() {
           </ProtectedPage>
         }
       />
-
+<Route
+  path="/refunds"
+  element={
+    <PermissionRoute permission="orders">
+      <Refunds />
+    </PermissionRoute>
+  }
+/>
       <Route
         path="/reports"
         element={
@@ -189,7 +200,14 @@ function AppRouter() {
           </ProtectedPage>
         }
       />
-
+<Route
+  path="/expenses"
+  element={
+    <ProtectedPage permission="reports">
+      <Expenses />
+    </ProtectedPage>
+  }
+/>
       <Route
         path="/inspection"
         element={

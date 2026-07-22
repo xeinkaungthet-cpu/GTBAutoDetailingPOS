@@ -11,6 +11,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   Legend,
   Pie,
   PieChart,
@@ -18,10 +19,16 @@ import {
   Tooltip,
   XAxis,
   YAxis,
-  Cell,
 } from "recharts";
 
 import { supabase } from "../lib/supabase";
+import ProfitAnalytics from "../components/reports/ProfitAnalytics";
+import useCurrency from "../hooks/useCurrency";
+import type { CurrencyCode } from "../services/currencyService";
+
+/* =========================================================
+   数据类型
+========================================================= */
 
 type Order = {
   id: number;
@@ -40,30 +47,64 @@ type Order = {
 type OrderItem = {
   id: number;
   order_id: number;
-
   service_id: number | null;
   product_id: number | null;
   package_id: number | null;
-
   quantity: number | string;
   unit_price: number | string;
   discount: number | string;
   total: number | string;
 };
+
+type Refund = {
+  id: number;
+  refund_no: string;
+  order_id: number;
+  refund_type: string;
+  refund_amount: number | string;
+  refund_method: string | null;
+  reason: string;
+  status: string;
+  notes: string | null;
+  created_at: string;
+  completed_at: string | null;
+};
+
+type RefundItem = {
+  id: number;
+  refund_id: number;
+  order_item_id: number;
+  item_type: string;
+  product_id: number | null;
+  service_id: number | null;
+  package_id: number | null;
+  item_name: string | null;
+  quantity: number | string;
+  unit_price: number | string;
+  refund_amount: number | string;
+  restock: boolean;
+  created_at: string;
+};
+
 type ServiceLookup = {
   id: number;
   service_name: string;
 };
+
 type PackageLookup = {
   id: number;
   package_name: string;
   package_name_en?: string | null;
 };
-type DailyRevenue = {
+
+type DailyFinancial = {
   date: string;
   displayDate: string;
-  revenue: number;
+  grossSales: number;
+  refunds: number;
+  netRevenue: number;
   orders: number;
+  refundCount: number;
 };
 
 type PaymentSummary = {
@@ -78,6 +119,18 @@ type ServiceSummary = {
   amount: number;
 };
 
+type RefundReasonSummary = {
+  name: string;
+  amount: number;
+  count: number;
+};
+
+type PeriodFinancial = {
+  grossSales: number;
+  refunds: number;
+  netRevenue: number;
+};
+
 const PAYMENT_COLORS = [
   "#2563eb",
   "#16a34a",
@@ -87,7 +140,28 @@ const PAYMENT_COLORS = [
   "#64748b",
 ];
 
+const REFUND_COLORS = [
+  "#dc2626",
+  "#ea580c",
+  "#d97706",
+  "#7c3aed",
+  "#475569",
+];
+
+/* =========================================================
+   页面组件
+========================================================= */
+
 function Reports() {
+  const {
+    formatMoney,
+    convertToDisplay,
+    displayCurrency,
+    accountingCurrency,
+    currentOption,
+    accountingOption,
+  } = useCurrency();
+
   const today = new Date();
 
   const [startDate, setStartDate] = useState(
@@ -111,21 +185,37 @@ function Reports() {
   const [summaryOrders, setSummaryOrders] =
     useState<Order[]>([]);
 
-const [orderItems, setOrderItems] = useState<
-  OrderItem[]
->([]);
+  const [refunds, setRefunds] = useState<
+    Refund[]
+  >([]);
 
-const [serviceNames, setServiceNames] =
-  useState<Record<number, string>>({});
+  const [summaryRefunds, setSummaryRefunds] =
+    useState<Refund[]>([]);
 
-const [packageNames, setPackageNames] =
-  useState<Record<number, string>>({});
+  const [orderItems, setOrderItems] = useState<
+    OrderItem[]
+  >([]);
+
+  const [refundItems, setRefundItems] = useState<
+    RefundItem[]
+  >([]);
+
+  const [serviceNames, setServiceNames] =
+    useState<Record<number, string>>({});
+
+  const [packageNames, setPackageNames] =
+    useState<Record<number, string>>({});
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    loadReportData();
+    void loadReportData();
   }, []);
+
+  /* =======================================================
+     加载报表数据
+  ======================================================= */
 
   async function loadReportData() {
     try {
@@ -135,8 +225,10 @@ const [packageNames, setPackageNames] =
       const rangeStart =
         parseInputDate(startDate);
 
-      const rangeEnd =
-        addDays(parseInputDate(endDate), 1);
+      const rangeEnd = addDays(
+        parseInputDate(endDate),
+        1
+      );
 
       if (rangeStart >= rangeEnd) {
         throw new Error(
@@ -153,7 +245,6 @@ const [packageNames, setPackageNames] =
       );
 
       const tomorrow = addDays(todayStart, 1);
-
       const weekStart =
         getMondayStart(currentDate);
 
@@ -174,6 +265,8 @@ const [packageNames, setPackageNames] =
       const [
         rangeOrdersResult,
         summaryOrdersResult,
+        rangeRefundsResult,
+        summaryRefundsResult,
       ] = await Promise.all([
         supabase
           .from("orders")
@@ -182,7 +275,7 @@ const [packageNames, setPackageNames] =
             id,
             order_no,
             member_id,
-vehicle_id,
+            vehicle_id,
             subtotal,
             discount,
             total,
@@ -211,7 +304,7 @@ vehicle_id,
             id,
             order_no,
             member_id,
-vehicle_id,
+            vehicle_id,
             subtotal,
             discount,
             total,
@@ -219,6 +312,64 @@ vehicle_id,
             payment_status,
             status,
             created_at
+          `
+          )
+          .gte(
+            "created_at",
+            summaryStart.toISOString()
+          )
+          .lt(
+            "created_at",
+            tomorrow.toISOString()
+          )
+          .order("created_at", {
+            ascending: true,
+          }),
+
+        supabase
+          .from("refunds")
+          .select(
+            `
+            id,
+            refund_no,
+            order_id,
+            refund_type,
+            refund_amount,
+            refund_method,
+            reason,
+            status,
+            notes,
+            created_at,
+            completed_at
+          `
+          )
+          .gte(
+            "created_at",
+            rangeStart.toISOString()
+          )
+          .lt(
+            "created_at",
+            rangeEnd.toISOString()
+          )
+          .order("created_at", {
+            ascending: true,
+          }),
+
+        supabase
+          .from("refunds")
+          .select(
+            `
+            id,
+            refund_no,
+            order_id,
+            refund_type,
+            refund_amount,
+            refund_method,
+            reason,
+            status,
+            notes,
+            created_at,
+            completed_at
           `
           )
           .gte(
@@ -242,6 +393,14 @@ vehicle_id,
         throw summaryOrdersResult.error;
       }
 
+      if (rangeRefundsResult.error) {
+        throw rangeRefundsResult.error;
+      }
+
+      if (summaryRefundsResult.error) {
+        throw summaryRefundsResult.error;
+      }
+
       const loadedOrders =
         (rangeOrdersResult.data ?? []) as Order[];
 
@@ -249,131 +408,190 @@ vehicle_id,
         (summaryOrdersResult.data ??
           []) as Order[];
 
+      const loadedRefunds =
+        (rangeRefundsResult.data ??
+          []) as Refund[];
+
+      const loadedSummaryRefunds =
+        (summaryRefundsResult.data ??
+          []) as Refund[];
+
       setOrders(loadedOrders);
       setSummaryOrders(loadedSummaryOrders);
+      setRefunds(loadedRefunds);
+      setSummaryRefunds(loadedSummaryRefunds);
 
       const orderIds = loadedOrders.map(
         (order) => order.id
       );
 
-      if (orderIds.length === 0) {
-  setOrderItems([]);
-  setServiceNames({});
-  setPackageNames({});
-  return;
-}
+      const refundIds = loadedRefunds.map(
+        (refund) => refund.id
+      );
 
-const {
-  data: itemsData,
-  error: itemsError,
-} = await supabase
-  .from("order_items")
-  .select(`
-    id,
-    order_id,
-    service_id,
-    product_id,
-    package_id,
-    quantity,
-    unit_price,
-    discount,
-    total
-  `)
-  .in("order_id", orderIds)
-  .order("id", {
-    ascending: true,
-  });
+      const itemsResult =
+        orderIds.length > 0
+          ? await supabase
+              .from("order_items")
+              .select(
+                `
+                id,
+                order_id,
+                service_id,
+                product_id,
+                package_id,
+                quantity,
+                unit_price,
+                discount,
+                total
+              `
+              )
+              .in("order_id", orderIds)
+              .order("id", {
+                ascending: true,
+              })
+          : { data: [], error: null };
 
-if (itemsError) {
-  throw itemsError;
-}
+      if (itemsResult.error) {
+        throw itemsResult.error;
+      }
 
-const loadedItems =
-  (itemsData ?? []) as OrderItem[];
+      const refundItemsResult =
+        refundIds.length > 0
+          ? await supabase
+              .from("refund_items")
+              .select(
+                `
+                id,
+                refund_id,
+                order_item_id,
+                item_type,
+                product_id,
+                service_id,
+                package_id,
+                item_name,
+                quantity,
+                unit_price,
+                refund_amount,
+                restock,
+                created_at
+              `
+              )
+              .in("refund_id", refundIds)
+              .order("id", {
+                ascending: true,
+              })
+          : { data: [], error: null };
 
-setOrderItems(loadedItems);
+      if (refundItemsResult.error) {
+        throw refundItemsResult.error;
+      }
 
-const serviceIds = Array.from(
-  new Set(
-    loadedItems
-      .map((item) => item.service_id)
-      .filter(
-        (id): id is number =>
-          id !== null
-      )
-  )
-);
+      const loadedItems =
+        (itemsResult.data ?? []) as OrderItem[];
 
-const packageIds = Array.from(
-  new Set(
-    loadedItems
-      .map((item) => item.package_id)
-      .filter(
-        (id): id is number =>
-          id !== null
-      )
-  )
-);
+      const loadedRefundItems =
+        (refundItemsResult.data ??
+          []) as RefundItem[];
 
-if (serviceIds.length > 0) {
-  const {
-    data: servicesData,
-    error: servicesError,
-  } = await supabase
-    .from("services")
-    .select("id, service_name")
-    .in("id", serviceIds);
+      setOrderItems(loadedItems);
+      setRefundItems(loadedRefundItems);
 
-  if (servicesError) {
-    throw servicesError;
-  }
+      const serviceIds = Array.from(
+        new Set(
+          [
+            ...loadedItems.map(
+              (item) => item.service_id
+            ),
+            ...loadedRefundItems.map(
+              (item) => item.service_id
+            ),
+          ].filter(
+            (id): id is number => id !== null
+          )
+        )
+      );
 
-  const serviceMap: Record<number, string> =
-    {};
+      const packageIds = Array.from(
+        new Set(
+          [
+            ...loadedItems.map(
+              (item) => item.package_id
+            ),
+            ...loadedRefundItems.map(
+              (item) => item.package_id
+            ),
+          ].filter(
+            (id): id is number => id !== null
+          )
+        )
+      );
 
-  (
-    (servicesData ?? []) as ServiceLookup[]
-  ).forEach((service) => {
-    serviceMap[service.id] =
-      service.service_name;
-  });
+      if (serviceIds.length > 0) {
+        const {
+          data: servicesData,
+          error: servicesError,
+        } = await supabase
+          .from("services")
+          .select("id, service_name")
+          .in("id", serviceIds);
 
-  setServiceNames(serviceMap);
-} else {
-  setServiceNames({});
-}
+        if (servicesError) {
+          throw servicesError;
+        }
 
-if (packageIds.length > 0) {
-  const {
-    data: packagesData,
-    error: packagesError,
-  } = await supabase
-    .from("packages")
-    .select(`
-      id,
-      package_name,
-      package_name_en
-    `)
-    .in("id", packageIds);
+        const serviceMap: Record<
+          number,
+          string
+        > = {};
 
-  if (packagesError) {
-    throw packagesError;
-  }
+        (
+          (servicesData ?? []) as ServiceLookup[]
+        ).forEach((service) => {
+          serviceMap[service.id] =
+            service.service_name;
+        });
 
-  const packageMap: Record<number, string> =
-    {};
+        setServiceNames(serviceMap);
+      } else {
+        setServiceNames({});
+      }
 
-  (
-    (packagesData ?? []) as PackageLookup[]
-  ).forEach((packageItem) => {
-    packageMap[packageItem.id] =
-      packageItem.package_name;
-  });
+      if (packageIds.length > 0) {
+        const {
+          data: packagesData,
+          error: packagesError,
+        } = await supabase
+          .from("packages")
+          .select(
+            `
+            id,
+            package_name,
+            package_name_en
+          `
+          )
+          .in("id", packageIds);
 
-  setPackageNames(packageMap);
-} else {
-  setPackageNames({});
-}
+        if (packagesError) {
+          throw packagesError;
+        }
+
+        const packageMap: Record<
+          number,
+          string
+        > = {};
+
+        (
+          (packagesData ?? []) as PackageLookup[]
+        ).forEach((packageItem) => {
+          packageMap[packageItem.id] =
+            packageItem.package_name;
+        });
+
+        setPackageNames(packageMap);
+      } else {
+        setPackageNames({});
+      }
     } catch (reportError) {
       console.error(
         "Failed to load reports:",
@@ -390,56 +608,105 @@ if (packageIds.length > 0) {
     }
   }
 
-  const revenueOrders = useMemo(
-    () => orders.filter(isRevenueOrder),
+  /* =======================================================
+     选定日期范围统计
+  ======================================================= */
+
+  const grossSaleOrders = useMemo(
+    () => orders.filter(isGrossSaleOrder),
     [orders]
   );
 
-  const totalRevenue = useMemo(
+  const completedRefunds = useMemo(
+    () => refunds.filter(isCompletedRefund),
+    [refunds]
+  );
+
+  const grossSales = useMemo(
     () =>
-      revenueOrders.reduce(
+      grossSaleOrders.reduce(
         (sum, order) =>
           sum + toNumber(order.total),
         0
       ),
-    [revenueOrders]
+    [grossSaleOrders]
   );
+
+  const totalRefunds = useMemo(
+    () =>
+      completedRefunds.reduce(
+        (sum, refund) =>
+          sum +
+          toNumber(refund.refund_amount),
+        0
+      ),
+    [completedRefunds]
+  );
+
+  const netRevenue = grossSales - totalRefunds;
 
   const totalSubtotal = useMemo(
     () =>
-      revenueOrders.reduce(
+      grossSaleOrders.reduce(
         (sum, order) =>
           sum + toNumber(order.subtotal),
         0
       ),
-    [revenueOrders]
+    [grossSaleOrders]
   );
 
   const totalDiscount = useMemo(
     () =>
-      revenueOrders.reduce(
+      grossSaleOrders.reduce(
         (sum, order) =>
           sum + toNumber(order.discount),
         0
       ),
-    [revenueOrders]
+    [grossSaleOrders]
   );
 
   const averageOrderValue =
-    revenueOrders.length > 0
-      ? totalRevenue / revenueOrders.length
+    grossSaleOrders.length > 0
+      ? grossSales / grossSaleOrders.length
       : 0;
 
-  const dailyRevenue = useMemo(() => {
+  const refundRate =
+    grossSales > 0
+      ? (totalRefunds / grossSales) * 100
+      : 0;
+
+  const restockedQuantity = useMemo(() => {
+    const validRefundIds = new Set(
+      completedRefunds.map(
+        (refund) => refund.id
+      )
+    );
+
+    return refundItems
+      .filter(
+        (item) =>
+          validRefundIds.has(item.refund_id) &&
+          item.restock
+      )
+      .reduce(
+        (sum, item) =>
+          sum + toNumber(item.quantity),
+        0
+      );
+  }, [completedRefunds, refundItems]);
+
+  const dailyFinancial = useMemo(() => {
     const rangeStart =
       parseInputDate(startDate);
 
-    const rangeEnd =
-      addDays(parseInputDate(endDate), 1);
+    const rangeEnd = addDays(
+      parseInputDate(endDate),
+      1
+    );
 
     const result = new Map<
       string,
-      DailyRevenue
+      DailyFinancial
     >();
 
     const cursor = new Date(rangeStart);
@@ -450,14 +717,17 @@ if (packageIds.length > 0) {
       result.set(key, {
         date: key,
         displayDate: formatShortDate(cursor),
-        revenue: 0,
+        grossSales: 0,
+        refunds: 0,
+        netRevenue: 0,
         orders: 0,
+        refundCount: 0,
       });
 
       cursor.setDate(cursor.getDate() + 1);
     }
 
-    revenueOrders.forEach((order) => {
+    grossSaleOrders.forEach((order) => {
       const key = toInputDate(
         new Date(order.created_at)
       );
@@ -466,13 +736,36 @@ if (packageIds.length > 0) {
 
       if (!current) return;
 
-      current.revenue += toNumber(order.total);
+      current.grossSales += toNumber(
+        order.total
+      );
       current.orders += 1;
+    });
+
+    completedRefunds.forEach((refund) => {
+      const key = toInputDate(
+        new Date(refund.created_at)
+      );
+
+      const current = result.get(key);
+
+      if (!current) return;
+
+      current.refunds += toNumber(
+        refund.refund_amount
+      );
+      current.refundCount += 1;
+    });
+
+    result.forEach((item) => {
+      item.netRevenue =
+        item.grossSales - item.refunds;
     });
 
     return Array.from(result.values());
   }, [
-    revenueOrders,
+    grossSaleOrders,
+    completedRefunds,
     startDate,
     endDate,
   ]);
@@ -483,7 +776,7 @@ if (packageIds.length > 0) {
       PaymentSummary
     >();
 
-    revenueOrders.forEach((order) => {
+    grossSaleOrders.forEach((order) => {
       const paymentKey =
         order.payment_method || "other";
 
@@ -505,11 +798,72 @@ if (packageIds.length > 0) {
     return Array.from(map.values()).sort(
       (a, b) => b.amount - a.amount
     );
-  }, [revenueOrders]);
+  }, [grossSaleOrders]);
+
+  const refundMethodSummary = useMemo(() => {
+    const map = new Map<
+      string,
+      PaymentSummary
+    >();
+
+    completedRefunds.forEach((refund) => {
+      const methodKey =
+        refund.refund_method || "other";
+
+      const methodName =
+        getPaymentLabel(methodKey);
+
+      const current = map.get(methodName) ?? {
+        name: methodName,
+        amount: 0,
+        orders: 0,
+      };
+
+      current.amount += toNumber(
+        refund.refund_amount
+      );
+      current.orders += 1;
+
+      map.set(methodName, current);
+    });
+
+    return Array.from(map.values()).sort(
+      (a, b) => b.amount - a.amount
+    );
+  }, [completedRefunds]);
+
+  const refundReasonSummary = useMemo(() => {
+    const map = new Map<
+      string,
+      RefundReasonSummary
+    >();
+
+    completedRefunds.forEach((refund) => {
+      const reason =
+        refund.reason?.trim() || "其他原因";
+
+      const current = map.get(reason) ?? {
+        name: reason,
+        amount: 0,
+        count: 0,
+      };
+
+      current.amount += toNumber(
+        refund.refund_amount
+      );
+      current.count += 1;
+
+      map.set(reason, current);
+    });
+
+    return Array.from(map.values())
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 8);
+  }, [completedRefunds]);
 
   const topServices = useMemo(() => {
     const validOrderIds = new Set(
-      revenueOrders.map((order) => order.id)
+      grossSaleOrders.map((order) => order.id)
     );
 
     const map = new Map<
@@ -522,17 +876,17 @@ if (packageIds.length > 0) {
         return;
       }
 
-const name = item.package_id
-  ? `🔥 ${
-      packageNames[item.package_id] ??
-      `套餐 #${item.package_id}`
-    }`
-  : item.service_id
-    ? serviceNames[item.service_id] ??
-      `服务 #${item.service_id}`
-    : item.product_id
-      ? `产品 #${item.product_id}`
-      : "其他项目";
+      const name = item.package_id
+        ? `🔥 ${
+            packageNames[item.package_id] ??
+            `套餐 #${item.package_id}`
+          }`
+        : item.service_id
+          ? serviceNames[item.service_id] ??
+            `服务 #${item.service_id}`
+          : item.product_id
+            ? `产品 #${item.product_id}`
+            : "其他项目";
 
       const current = map.get(name) ?? {
         name,
@@ -544,52 +898,48 @@ const name = item.package_id
         item.quantity
       );
 
-      current.amount += toNumber(
-  item.total
-);
+      current.amount += toNumber(item.total);
 
       map.set(name, current);
     });
 
     return Array.from(map.values())
-      .sort(
-        (a, b) =>
-          b.quantity - a.quantity
-      )
+      .sort((a, b) => b.quantity - a.quantity)
       .slice(0, 8);
-}, [
-  orderItems,
-  revenueOrders,
-  serviceNames,
-  packageNames,
-]);
+  }, [
+    orderItems,
+    grossSaleOrders,
+    serviceNames,
+    packageNames,
+  ]);
 
-  const todayRevenue = useMemo(() => {
+  /* =======================================================
+     今日 / 本周 / 本月净营业额
+  ======================================================= */
+
+  const todayFinancial = useMemo(() => {
     const now = new Date();
 
-    return calculateRevenueBetween(
-      summaryOrders,
-      new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate()
-      ),
-      addDays(
-        new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          now.getDate()
-        ),
-        1
-      )
+    const start = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate()
     );
-  }, [summaryOrders]);
 
-  const weekRevenue = useMemo(() => {
+    return calculateFinancialBetween(
+      summaryOrders,
+      summaryRefunds,
+      start,
+      addDays(start, 1)
+    );
+  }, [summaryOrders, summaryRefunds]);
+
+  const weekFinancial = useMemo(() => {
     const now = new Date();
 
-    return calculateRevenueBetween(
+    return calculateFinancialBetween(
       summaryOrders,
+      summaryRefunds,
       getMondayStart(now),
       addDays(
         new Date(
@@ -600,13 +950,14 @@ const name = item.package_id
         1
       )
     );
-  }, [summaryOrders]);
+  }, [summaryOrders, summaryRefunds]);
 
-  const monthRevenue = useMemo(() => {
+  const monthFinancial = useMemo(() => {
     const now = new Date();
 
-    return calculateRevenueBetween(
+    return calculateFinancialBetween(
       summaryOrders,
+      summaryRefunds,
       new Date(
         now.getFullYear(),
         now.getMonth(),
@@ -621,54 +972,159 @@ const name = item.package_id
         1
       )
     );
-  }, [summaryOrders]);
+  }, [summaryOrders, summaryRefunds]);
+
+  /* =======================================================
+     货币显示与导出
+  ======================================================= */
+
+  function formatChartMoney(
+    value: number
+  ) {
+    return formatCompactCurrency(
+      convertToDisplay(
+        Number.isFinite(value)
+          ? value
+          : 0
+      ),
+      displayCurrency
+    );
+  }
+
+  /* =======================================================
+     导出与打印
+  ======================================================= */
 
   function exportCSV() {
-    if (orders.length === 0) {
-      alert("当前日期范围没有订单");
+    if (
+      grossSaleOrders.length === 0 &&
+      completedRefunds.length === 0
+    ) {
+      alert("当前日期范围没有销售或退款记录");
       return;
     }
 
-    const headers = [
-      "订单编号",
-      "日期",
-      "会员ID",
-"车辆ID",
-      "付款方式",
-      "小计",
-      "折扣",
-      "总金额",
-      "付款状态",
-      "订单状态",
+    const exportDigits =
+      displayCurrency === "MMK"
+        ? 0
+        : 2;
+
+    const exportMoney = (
+      value: number
+    ) =>
+      convertToDisplay(value).toFixed(
+        exportDigits
+      );
+
+    const summaryRows = [
+      ["GTB 财务报表"],
+      ["开始日期", startDate],
+      ["结束日期", endDate],
+      ["账本基础货币", accountingCurrency],
+      ["导出显示货币", displayCurrency],
+      [
+        "换算说明",
+        "金额按当前手动汇率转换；数据库原始金额未修改",
+      ],
+      [
+        "销售总额",
+        exportMoney(grossSales),
+      ],
+      [
+        "退款总额",
+        exportMoney(totalRefunds),
+      ],
+      [
+        "净营业额",
+        exportMoney(netRevenue),
+      ],
+      [
+        "退款率",
+        `${refundRate.toFixed(2)}%`,
+      ],
+      [],
     ];
 
-    const rows = orders.map((order) => [
-      order.order_no,
-      formatDateTime(order.created_at),
-      order.member_id ?? "",
-order.vehicle_id ?? "",
-      getPaymentLabel(
-        order.payment_method ?? "other"
-      ),
-      toNumber(order.subtotal).toFixed(2),
-      toNumber(order.discount).toFixed(2),
-      toNumber(order.total).toFixed(2),
-      getPaymentStatusLabel(
-        order.payment_status
-      ),
-      getOrderStatusLabel(
-        order.status
-      ),
-    ]);
+    const headers = [
+      "交易类型",
+      "交易编号",
+      "关联订单",
+      "日期时间",
+      "付款/退款方式",
+      `小计 (${displayCurrency})`,
+      `折扣 (${displayCurrency})`,
+      `金额 (${displayCurrency})`,
+      "状态",
+      "原因/备注",
+    ];
+
+    const orderRows = grossSaleOrders.map(
+      (order) => [
+        "销售",
+        order.order_no,
+        order.order_no,
+        formatDateTime(order.created_at),
+        getPaymentLabel(
+          order.payment_method ?? "other"
+        ),
+        exportMoney(
+          toNumber(order.subtotal)
+        ),
+        exportMoney(
+          toNumber(order.discount)
+        ),
+        exportMoney(
+          toNumber(order.total)
+        ),
+        getOrderStatusLabel(order.status),
+        getPaymentStatusLabel(
+          order.payment_status
+        ),
+      ]
+    );
+
+    const refundRows = completedRefunds.map(
+      (refund) => [
+        "退款",
+        refund.refund_no,
+        `Order ID ${refund.order_id}`,
+        formatDateTime(refund.created_at),
+        getPaymentLabel(
+          refund.refund_method ?? "other"
+        ),
+        "",
+        "",
+        exportMoney(
+          -toNumber(
+            refund.refund_amount
+          )
+        ),
+        getRefundStatusLabel(refund.status),
+        [refund.reason, refund.notes]
+          .filter(Boolean)
+          .join(" - "),
+      ]
+    );
+
+    const transactionRows = [
+      ...orderRows,
+      ...refundRows,
+    ].sort((a, b) => {
+      const dateA = new Date(String(a[3]));
+      const dateB = new Date(String(b[3]));
+
+      return dateA.getTime() - dateB.getTime();
+    });
 
     const csvContent = [
+      ...summaryRows,
       headers,
-      ...rows,
+      ...transactionRows,
     ]
       .map((row) =>
         row
           .map((value) =>
-            `"${String(value).replace(
+            `"${String(value ?? "").replace(
               /"/g,
               '""'
             )}"`
@@ -685,11 +1141,10 @@ order.vehicle_id ?? "",
     );
 
     const url = URL.createObjectURL(blob);
-
     const link = document.createElement("a");
 
     link.href = url;
-    link.download = `GTB-Financial-Report-${startDate}-${endDate}.csv`;
+    link.download = `GTB-Net-Financial-Report-${displayCurrency}-${startDate}-${endDate}.csv`;
 
     document.body.appendChild(link);
     link.click();
@@ -701,6 +1156,10 @@ order.vehicle_id ?? "",
   function printReport() {
     window.print();
   }
+
+  /* =======================================================
+     页面 UI
+  ======================================================= */
 
   return (
     <main
@@ -743,7 +1202,7 @@ order.vehicle_id ?? "",
       <header style={header}>
         <div>
           <p style={eyebrow}>
-            FINANCIAL ANALYTICS
+            NET FINANCIAL ANALYTICS
           </p>
 
           <h1 style={title}>
@@ -751,7 +1210,23 @@ order.vehicle_id ?? "",
           </h1>
 
           <p style={subtitle}>
-            营业额、订单、付款方式与热门服务分析
+            销售总额、退款、净营业额、付款方式与经营趋势分析
+          </p>
+
+          <p style={subtitle}>
+            当前显示货币：
+            <strong>
+              {" "}
+              {currentOption.flag}{" "}
+              {currentOption.code}
+            </strong>
+            {" · "}
+            账本基础货币：
+            <strong>
+              {" "}
+              {accountingOption.flag}{" "}
+              {accountingCurrency}
+            </strong>
           </p>
         </div>
 
@@ -761,11 +1236,13 @@ order.vehicle_id ?? "",
         >
           <button
             type="button"
-            onClick={loadReportData}
+            onClick={() => void loadReportData()}
             disabled={loading}
             style={secondaryButton}
           >
-            ↻ 刷新数据
+            {loading
+              ? "正在刷新..."
+              : "↻ 刷新数据"}
           </button>
 
           <button
@@ -822,7 +1299,7 @@ order.vehicle_id ?? "",
 
         <button
           type="button"
-          onClick={loadReportData}
+          onClick={() => void loadReportData()}
           disabled={loading}
           style={{
             ...applyButton,
@@ -844,26 +1321,62 @@ order.vehicle_id ?? "",
 
       <section style={summaryGrid}>
         <ReportCard
+          icon="💵"
+          label="销售总额"
+          english="Gross Sales"
+          value={formatMoney(grossSales)}
+          accent="#2563eb"
+        />
+
+        <ReportCard
+          icon="↩️"
+          label="退款总额"
+          english="Total Refunds"
+          value={formatMoney(totalRefunds)}
+          accent="#dc2626"
+        />
+
+        <ReportCard
           icon="💰"
-          label="日期范围营业额"
-          english="Selected Revenue"
-          value={formatCurrency(totalRevenue)}
-          accent="#16a34a"
+          label="实际净营业额"
+          english="Net Revenue"
+          value={formatMoney(netRevenue)}
+          accent={
+            netRevenue >= 0
+              ? "#16a34a"
+              : "#dc2626"
+          }
+        />
+
+        <ReportCard
+          icon="📉"
+          label="退款率"
+          english="Refund Rate"
+          value={`${refundRate.toFixed(2)}%`}
+          accent="#ea580c"
         />
 
         <ReportCard
           icon="🧾"
-          label="有效订单"
-          english="Completed Orders"
-          value={`${revenueOrders.length} 单`}
-          accent="#2563eb"
+          label="销售订单"
+          english="Gross Orders"
+          value={`${grossSaleOrders.length} 单`}
+          accent="#0891b2"
+        />
+
+        <ReportCard
+          icon="📄"
+          label="退款笔数"
+          english="Refund Count"
+          value={`${completedRefunds.length} 笔`}
+          accent="#7c3aed"
         />
 
         <ReportCard
           icon="📊"
           label="平均客单价"
           english="Average Order"
-          value={formatCurrency(
+          value={formatMoney(
             averageOrderValue
           )}
           accent="#8b5cf6"
@@ -873,40 +1386,37 @@ order.vehicle_id ?? "",
           icon="🏷️"
           label="折扣金额"
           english="Total Discount"
-          value={formatCurrency(totalDiscount)}
+          value={formatMoney(totalDiscount)}
           accent="#f59e0b"
         />
+      </section>
 
-        <ReportCard
+      <section style={periodGrid}>
+        <PeriodCard
           icon="📅"
-          label="今日营业额"
-          english="Today Revenue"
-          value={formatCurrency(todayRevenue)}
+          title="今日经营"
+          english="Today"
+          financial={todayFinancial}
           accent="#0891b2"
+          formatMoney={formatMoney}
         />
 
-        <ReportCard
+        <PeriodCard
           icon="🗓️"
-          label="本周营业额"
-          english="Week Revenue"
-          value={formatCurrency(weekRevenue)}
+          title="本周经营"
+          english="This Week"
+          financial={weekFinancial}
           accent="#db2777"
+          formatMoney={formatMoney}
         />
 
-        <ReportCard
+        <PeriodCard
           icon="📈"
-          label="本月营业额"
-          english="Month Revenue"
-          value={formatCurrency(monthRevenue)}
+          title="本月经营"
+          english="This Month"
+          financial={monthFinancial}
           accent="#ea580c"
-        />
-
-        <ReportCard
-          icon="🧮"
-          label="折扣前金额"
-          english="Gross Subtotal"
-          value={formatCurrency(totalSubtotal)}
-          accent="#475569"
+          formatMoney={formatMoney}
         />
       </section>
 
@@ -917,17 +1427,27 @@ order.vehicle_id ?? "",
         <div style={sectionHeader}>
           <div>
             <p style={sectionEyebrow}>
-              REVENUE TREND
+              GROSS · REFUNDS · NET
             </p>
 
             <h2 style={sectionTitle}>
-              每日营业趋势
+              每日净营业趋势
             </h2>
           </div>
 
-          <strong style={sectionTotal}>
-            {formatCurrency(totalRevenue)}
-          </strong>
+          <div style={sectionTotals}>
+            <span style={grossTotalText}>
+              销售 {formatMoney(grossSales)}
+            </span>
+
+            <span style={refundTotalText}>
+              退款 {formatMoney(totalRefunds)}
+            </span>
+
+            <strong style={sectionTotal}>
+              净额 {formatMoney(netRevenue)}
+            </strong>
+          </div>
         </div>
 
         <div style={chartHeight}>
@@ -936,17 +1456,17 @@ order.vehicle_id ?? "",
             height="100%"
           >
             <AreaChart
-              data={dailyRevenue}
+              data={dailyFinancial}
               margin={{
                 top: 15,
-                right: 15,
+                right: 20,
                 left: 5,
                 bottom: 5,
               }}
             >
               <defs>
                 <linearGradient
-                  id="revenueGradient"
+                  id="grossGradient"
                   x1="0"
                   y1="0"
                   x2="0"
@@ -955,12 +1475,49 @@ order.vehicle_id ?? "",
                   <stop
                     offset="5%"
                     stopColor="#2563eb"
-                    stopOpacity={0.35}
+                    stopOpacity={0.25}
                   />
-
                   <stop
                     offset="95%"
                     stopColor="#2563eb"
+                    stopOpacity={0.02}
+                  />
+                </linearGradient>
+
+                <linearGradient
+                  id="refundGradient"
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2="1"
+                >
+                  <stop
+                    offset="5%"
+                    stopColor="#dc2626"
+                    stopOpacity={0.2}
+                  />
+                  <stop
+                    offset="95%"
+                    stopColor="#dc2626"
+                    stopOpacity={0.01}
+                  />
+                </linearGradient>
+
+                <linearGradient
+                  id="netGradient"
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2="1"
+                >
+                  <stop
+                    offset="5%"
+                    stopColor="#16a34a"
+                    stopOpacity={0.28}
+                  />
+                  <stop
+                    offset="95%"
+                    stopColor="#16a34a"
                     stopOpacity={0.02}
                   />
                 </linearGradient>
@@ -984,7 +1541,9 @@ order.vehicle_id ?? "",
 
               <YAxis
                 tickFormatter={(value) =>
-                  `$${value}`
+                  formatChartMoney(
+                    Number(value)
+                  )
                 }
                 tick={{
                   fill: "#64748b",
@@ -995,24 +1554,46 @@ order.vehicle_id ?? "",
               />
 
               <Tooltip
-                formatter={(value) => [
-                  formatCurrency(
-                    Number(value)
-                  ),
-                  "营业额",
+                formatter={(value, name) => [
+                  formatMoney(Number(value)),
+                  getTrendLabel(String(name)),
                 ]}
                 labelFormatter={(label) =>
                   `日期：${label}`
                 }
               />
 
+              <Legend
+                formatter={(value) =>
+                  getTrendLabel(String(value))
+                }
+              />
+
               <Area
                 type="monotone"
-                dataKey="revenue"
+                dataKey="grossSales"
                 stroke="#2563eb"
+                strokeWidth={2}
+                fill="url(#grossGradient)"
+                name="grossSales"
+              />
+
+              <Area
+                type="monotone"
+                dataKey="refunds"
+                stroke="#dc2626"
+                strokeWidth={2}
+                fill="url(#refundGradient)"
+                name="refunds"
+              />
+
+              <Area
+                type="monotone"
+                dataKey="netRevenue"
+                stroke="#16a34a"
                 strokeWidth={3}
-                fill="url(#revenueGradient)"
-                name="营业额"
+                fill="url(#netGradient)"
+                name="netRevenue"
               />
             </AreaChart>
           </ResponsiveContainer>
@@ -1027,11 +1608,11 @@ order.vehicle_id ?? "",
           <div style={sectionHeader}>
             <div>
               <p style={sectionEyebrow}>
-                PAYMENT METHODS
+                SALES PAYMENT METHODS
               </p>
 
               <h2 style={sectionTitle}>
-                付款方式统计
+                销售付款方式
               </h2>
             </div>
           </div>
@@ -1047,8 +1628,8 @@ order.vehicle_id ?? "",
                     data={paymentSummary}
                     dataKey="amount"
                     nameKey="name"
-                    innerRadius={55}
-                    outerRadius={95}
+                    innerRadius={52}
+                    outerRadius={92}
                     paddingAngle={4}
                   >
                     {paymentSummary.map(
@@ -1068,7 +1649,7 @@ order.vehicle_id ?? "",
 
                   <Tooltip
                     formatter={(value) =>
-                      formatCurrency(
+                      formatMoney(
                         Number(value)
                       )
                     }
@@ -1079,7 +1660,7 @@ order.vehicle_id ?? "",
               </ResponsiveContainer>
             </div>
           ) : (
-            <EmptyState text="暂无付款数据" />
+            <EmptyState text="暂无销售付款数据" />
           )}
         </div>
 
@@ -1090,11 +1671,74 @@ order.vehicle_id ?? "",
           <div style={sectionHeader}>
             <div>
               <p style={sectionEyebrow}>
-                TOP SERVICES
+                REFUND METHODS
               </p>
 
               <h2 style={sectionTitle}>
-                热门服务排行
+                退款方式统计
+              </h2>
+            </div>
+          </div>
+
+          {refundMethodSummary.length > 0 ? (
+            <div style={mediumChartHeight}>
+              <ResponsiveContainer
+                width="100%"
+                height="100%"
+              >
+                <PieChart>
+                  <Pie
+                    data={refundMethodSummary}
+                    dataKey="amount"
+                    nameKey="name"
+                    innerRadius={52}
+                    outerRadius={92}
+                    paddingAngle={4}
+                  >
+                    {refundMethodSummary.map(
+                      (_, index) => (
+                        <Cell
+                          key={index}
+                          fill={
+                            REFUND_COLORS[
+                              index %
+                                REFUND_COLORS.length
+                            ]
+                          }
+                        />
+                      )
+                    )}
+                  </Pie>
+
+                  <Tooltip
+                    formatter={(value) =>
+                      formatMoney(
+                        Number(value)
+                      )
+                    }
+                  />
+
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <EmptyState text="暂无退款方式数据" />
+          )}
+        </div>
+
+        <div
+          className="reports-card"
+          style={chartCard}
+        >
+          <div style={sectionHeader}>
+            <div>
+              <p style={sectionEyebrow}>
+                TOP SALES ITEMS
+              </p>
+
+              <h2 style={sectionTitle}>
+                热门销售项目（退款前）
               </h2>
             </div>
           </div>
@@ -1131,12 +1775,12 @@ order.vehicle_id ?? "",
                   <YAxis
                     type="category"
                     dataKey="name"
-                    width={110}
+                    width={120}
                     axisLine={false}
                     tickLine={false}
                     tick={{
                       fill: "#475569",
-                      fontSize: 12,
+                      fontSize: 11,
                     }}
                   />
 
@@ -1157,8 +1801,126 @@ order.vehicle_id ?? "",
               </ResponsiveContainer>
             </div>
           ) : (
-            <EmptyState text="暂无服务销售数据" />
+            <EmptyState text="暂无销售项目数据" />
           )}
+        </div>
+
+        <div
+          className="reports-card"
+          style={chartCard}
+        >
+          <div style={sectionHeader}>
+            <div>
+              <p style={sectionEyebrow}>
+                REFUND REASONS
+              </p>
+
+              <h2 style={sectionTitle}>
+                退款原因分析
+              </h2>
+            </div>
+          </div>
+
+          {refundReasonSummary.length > 0 ? (
+            <div style={mediumChartHeight}>
+              <ResponsiveContainer
+                width="100%"
+                height="100%"
+              >
+                <BarChart
+                  data={refundReasonSummary}
+                  layout="vertical"
+                  margin={{
+                    top: 5,
+                    right: 20,
+                    left: 15,
+                    bottom: 5,
+                  }}
+                >
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    horizontal={false}
+                    stroke="#e2e8f0"
+                  />
+
+                  <XAxis
+                    type="number"
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={(value) =>
+                      formatChartMoney(
+                        Number(value)
+                      )
+                    }
+                  />
+
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    width={120}
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{
+                      fill: "#475569",
+                      fontSize: 11,
+                    }}
+                  />
+
+                  <Tooltip
+                    formatter={(value) => [
+                      formatMoney(
+                        Number(value)
+                      ),
+                      "退款金额",
+                    ]}
+                  />
+
+                  <Bar
+                    dataKey="amount"
+                    fill="#dc2626"
+                    radius={[0, 8, 8, 0]}
+                    name="退款金额"
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <EmptyState text="暂无退款原因数据" />
+          )}
+        </div>
+      </section>
+
+      <section
+        className="reports-card"
+        style={operationsCard}
+      >
+        <div style={operationsGrid}>
+          <OperationItem
+            label="折扣前金额"
+            value={formatMoney(totalSubtotal)}
+            accent="#475569"
+          />
+
+          <OperationItem
+            label="退款产品回库"
+            value={`${restockedQuantity} 件`}
+            accent="#16a34a"
+          />
+
+          <OperationItem
+            label="选定日期交易"
+            value={`${
+              grossSaleOrders.length +
+              completedRefunds.length
+            } 笔`}
+            accent="#2563eb"
+          />
+
+          <OperationItem
+            label="净额计算公式"
+            value="销售总额 - 退款总额"
+            accent="#7c3aed"
+          />
         </div>
       </section>
 
@@ -1169,16 +1931,16 @@ order.vehicle_id ?? "",
         <div style={sectionHeader}>
           <div>
             <p style={sectionEyebrow}>
-              ORDER DETAILS
+              SALES ORDER DETAILS
             </p>
 
             <h2 style={sectionTitle}>
-              财务订单明细
+              销售订单明细
             </h2>
           </div>
 
           <span style={orderCountBadge}>
-            共 {orders.length} 单
+            共 {grossSaleOrders.length} 单
           </span>
         </div>
 
@@ -1192,23 +1954,24 @@ order.vehicle_id ?? "",
                 <th style={th}>付款方式</th>
                 <th style={th}>小计</th>
                 <th style={th}>折扣</th>
-                <th style={th}>总金额</th>
-                <th style={th}>状态</th>
+                <th style={th}>销售总额</th>
+                <th style={th}>付款状态</th>
+                <th style={th}>订单状态</th>
               </tr>
             </thead>
 
             <tbody>
-              {orders.length === 0 ? (
+              {grossSaleOrders.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={9}
                     style={emptyTableCell}
                   >
-                    当前日期范围暂无订单
+                    当前日期范围暂无销售订单
                   </td>
                 </tr>
               ) : (
-                [...orders]
+                [...grossSaleOrders]
                   .reverse()
                   .map((order) => (
                     <tr key={order.id}>
@@ -1227,12 +1990,15 @@ order.vehicle_id ?? "",
                       <td style={td}>
                         <div style={customerCell}>
                           <strong>
-  会员ID：{order.member_id ?? "散客"}
-</strong>
+                            会员ID：
+                            {order.member_id ?? "散客"}
+                          </strong>
 
-<span>
-  车辆ID：{order.vehicle_id ?? "未登记"}
-</span>
+                          <span>
+                            车辆ID：
+                            {order.vehicle_id ??
+                              "未登记"}
+                          </span>
                         </div>
                       </td>
 
@@ -1244,34 +2010,36 @@ order.vehicle_id ?? "",
                       </td>
 
                       <td style={td}>
-                        {formatCurrency(
-                          toNumber(
-                            order.subtotal
-                          )
+                        {formatMoney(
+                          toNumber(order.subtotal)
                         )}
                       </td>
 
                       <td style={td}>
-                        {formatCurrency(
-                          toNumber(
-                            order.discount
-                          )
+                        {formatMoney(
+                          toNumber(order.discount)
                         )}
                       </td>
 
                       <td style={td}>
                         <strong style={moneyText}>
-                          {formatCurrency(
+                          {formatMoney(
                             toNumber(order.total)
                           )}
                         </strong>
                       </td>
 
                       <td style={td}>
-                        <StatusBadge
+                        <PaymentStatusBadge
                           status={
-                            order.status
+                            order.payment_status
                           }
+                        />
+                      </td>
+
+                      <td style={td}>
+                        <StatusBadge
+                          status={order.status}
                         />
                       </td>
                     </tr>
@@ -1282,9 +2050,137 @@ order.vehicle_id ?? "",
         </div>
       </section>
 
+      <section
+        className="reports-card"
+        style={refundTableCard}
+      >
+        <div style={sectionHeader}>
+          <div>
+            <p style={sectionEyebrow}>
+              REFUND DETAILS
+            </p>
+
+            <h2 style={sectionTitle}>
+              退款交易明细
+            </h2>
+          </div>
+
+          <span style={refundCountBadge}>
+            共 {completedRefunds.length} 笔
+          </span>
+        </div>
+
+        <div style={tableWrapper}>
+          <table style={refundTable}>
+            <thead>
+              <tr>
+                <th style={th}>退款编号</th>
+                <th style={th}>日期时间</th>
+                <th style={th}>原订单 ID</th>
+                <th style={th}>退款类型</th>
+                <th style={th}>退款方式</th>
+                <th style={th}>退款原因</th>
+                <th style={th}>退款金额</th>
+                <th style={th}>状态</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {completedRefunds.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={8}
+                    style={emptyTableCell}
+                  >
+                    当前日期范围暂无退款记录
+                  </td>
+                </tr>
+              ) : (
+                [...completedRefunds]
+                  .reverse()
+                  .map((refund) => (
+                    <tr key={refund.id}>
+                      <td style={td}>
+                        <strong
+                          style={refundNumberText}
+                        >
+                          {refund.refund_no}
+                        </strong>
+                      </td>
+
+                      <td style={td}>
+                        {formatDateTime(
+                          refund.created_at
+                        )}
+                      </td>
+
+                      <td style={td}>
+                        #{refund.order_id}
+                      </td>
+
+                      <td style={td}>
+                        {getRefundTypeLabel(
+                          refund.refund_type
+                        )}
+                      </td>
+
+                      <td style={td}>
+                        {getPaymentLabel(
+                          refund.refund_method ||
+                            "other"
+                        )}
+                      </td>
+
+                      <td style={td}>
+                        <div style={reasonCell}>
+                          <strong>
+                            {refund.reason || "—"}
+                          </strong>
+
+                          {refund.notes && (
+                            <span>
+                              {refund.notes}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      <td style={td}>
+                        <strong
+                          style={refundMoneyText}
+                        >
+                          -
+                          {formatMoney(
+                            toNumber(
+                              refund.refund_amount
+                            )
+                          )}
+                        </strong>
+                      </td>
+
+                      <td style={td}>
+                        <RefundStatusBadge
+                          status={refund.status}
+                        />
+                      </td>
+                    </tr>
+                  ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+<ProfitAnalytics
+  startDate={startDate}
+  endDate={endDate}
+/>
       <footer style={reportFooter}>
         <span>
           报表日期：{startDate} 至 {endDate}
+        </span>
+
+        <span>
+          净营业额 = 日期内销售总额 - 日期内已完成退款
         </span>
 
         <span>
@@ -1294,6 +2190,10 @@ order.vehicle_id ?? "",
     </main>
   );
 }
+
+/* =========================================================
+   UI 小组件
+========================================================= */
 
 function ReportCard({
   icon,
@@ -1327,9 +2227,7 @@ function ReportCard({
       </div>
 
       <div>
-        <p style={summaryLabel}>
-          {label}
-        </p>
+        <p style={summaryLabel}>{label}</p>
 
         <p style={summaryEnglish}>
           {english}
@@ -1340,6 +2238,105 @@ function ReportCard({
         </strong>
       </div>
     </article>
+  );
+}
+
+function PeriodCard({
+  icon,
+  title,
+  english,
+  financial,
+  accent,
+  formatMoney,
+}: {
+  icon: string;
+  title: string;
+  english: string;
+  financial: PeriodFinancial;
+  accent: string;
+  formatMoney: (
+    value: number
+  ) => string;
+}) {
+  return (
+    <article
+      className="reports-card"
+      style={{
+        ...periodCard,
+        borderLeft: `5px solid ${accent}`,
+      }}
+    >
+      <div style={periodHeader}>
+        <div
+          style={{
+            ...periodIcon,
+            background: `${accent}15`,
+            color: accent,
+          }}
+        >
+          {icon}
+        </div>
+
+        <div>
+          <strong style={periodTitle}>
+            {title}
+          </strong>
+          <span style={periodEnglish}>
+            {english}
+          </span>
+        </div>
+      </div>
+
+      <strong
+        style={{
+          ...periodNetValue,
+          color:
+            financial.netRevenue >= 0
+              ? "#15803d"
+              : "#dc2626",
+        }}
+      >
+        {formatMoney(financial.netRevenue)}
+      </strong>
+
+      <div style={periodMeta}>
+        <span>
+          销售：
+          {formatMoney(financial.grossSales)}
+        </span>
+        <span>
+          退款：
+          {formatMoney(financial.refunds)}
+        </span>
+      </div>
+    </article>
+  );
+}
+
+function OperationItem({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: string;
+  accent: string;
+}) {
+  return (
+    <div style={operationItem}>
+      <span style={operationLabel}>
+        {label}
+      </span>
+
+      <strong
+        style={{
+          ...operationValue,
+          color: accent,
+        }}
+      >
+        {value}
+      </strong>
+    </div>
   );
 }
 
@@ -1362,7 +2359,7 @@ function StatusBadge({
   status: string | null;
 }) {
   const normalizedStatus =
-    status || "pending";
+    status?.toLowerCase() || "pending";
 
   const completed =
     normalizedStatus === "completed";
@@ -1370,45 +2367,135 @@ function StatusBadge({
   const cancelled =
     normalizedStatus === "cancelled";
 
+  const refunded =
+    normalizedStatus === "refunded";
+
   return (
     <span
       style={{
         ...statusBadge,
         color: completed
           ? "#15803d"
-          : cancelled
+          : cancelled || refunded
             ? "#b91c1c"
             : "#1d4ed8",
         background: completed
           ? "#dcfce7"
-          : cancelled
+          : cancelled || refunded
             ? "#fee2e2"
             : "#dbeafe",
       }}
     >
-      {getOrderStatusLabel(
-        normalizedStatus
-      )}
+      {getOrderStatusLabel(normalizedStatus)}
     </span>
   );
 }
 
-function isRevenueOrder(order: Order) {
+function PaymentStatusBadge({
+  status,
+}: {
+  status: string | null;
+}) {
+  const normalizedStatus =
+    status?.toLowerCase() || "unknown";
+
+  const paid = normalizedStatus === "paid";
+  const refunded =
+    normalizedStatus === "refunded";
+  const unpaid = normalizedStatus === "unpaid";
+
   return (
-    order.status !== "cancelled" &&
-    order.payment_status !== "refunded" &&
-    order.payment_status !== "unpaid"
+    <span
+      style={{
+        ...statusBadge,
+        color: paid
+          ? "#15803d"
+          : refunded
+            ? "#b91c1c"
+            : unpaid
+              ? "#92400e"
+              : "#1d4ed8",
+        background: paid
+          ? "#dcfce7"
+          : refunded
+            ? "#fee2e2"
+            : unpaid
+              ? "#fef3c7"
+              : "#dbeafe",
+      }}
+    >
+      {getPaymentStatusLabel(status)}
+    </span>
   );
 }
 
-function calculateRevenueBetween(
+function RefundStatusBadge({
+  status,
+}: {
+  status: string | null;
+}) {
+  const normalizedStatus =
+    status?.toLowerCase() || "pending";
+
+  const completed =
+    normalizedStatus === "completed";
+
+  const failed = normalizedStatus === "failed";
+
+  return (
+    <span
+      style={{
+        ...statusBadge,
+        color: completed
+          ? "#15803d"
+          : failed
+            ? "#b91c1c"
+            : "#92400e",
+        background: completed
+          ? "#dcfce7"
+          : failed
+            ? "#fee2e2"
+            : "#fef3c7",
+      }}
+    >
+      {getRefundStatusLabel(status)}
+    </span>
+  );
+}
+
+/* =========================================================
+   财务计算函数
+========================================================= */
+
+function isGrossSaleOrder(order: Order) {
+  const orderStatus =
+    order.status?.toLowerCase() || "";
+
+  const paymentStatus =
+    order.payment_status?.toLowerCase() || "";
+
+  return (
+    orderStatus !== "cancelled" &&
+    paymentStatus !== "unpaid"
+  );
+}
+
+function isCompletedRefund(refund: Refund) {
+  return (
+    refund.status?.toLowerCase() ===
+    "completed"
+  );
+}
+
+function calculateFinancialBetween(
   sourceOrders: Order[],
+  sourceRefunds: Refund[],
   start: Date,
   end: Date
-) {
-  return sourceOrders
+): PeriodFinancial {
+  const grossSales = sourceOrders
     .filter((order) => {
-      if (!isRevenueOrder(order)) {
+      if (!isGrossSaleOrder(order)) {
         return false;
       }
 
@@ -1416,17 +2503,44 @@ function calculateRevenueBetween(
         order.created_at
       );
 
-      return (
-        orderDate >= start &&
-        orderDate < end
-      );
+      return orderDate >= start && orderDate < end;
     })
     .reduce(
       (sum, order) =>
         sum + toNumber(order.total),
       0
     );
+
+  const refunds = sourceRefunds
+    .filter((refund) => {
+      if (!isCompletedRefund(refund)) {
+        return false;
+      }
+
+      const refundDate = new Date(
+        refund.created_at
+      );
+
+      return (
+        refundDate >= start && refundDate < end
+      );
+    })
+    .reduce(
+      (sum, refund) =>
+        sum + toNumber(refund.refund_amount),
+      0
+    );
+
+  return {
+    grossSales,
+    refunds,
+    netRevenue: grossSales - refunds,
+  };
 }
+
+/* =========================================================
+   格式化工具
+========================================================= */
 
 function getMondayStart(date: Date) {
   const result = new Date(
@@ -1436,9 +2550,7 @@ function getMondayStart(date: Date) {
   );
 
   const day = result.getDay();
-
-  const difference =
-    day === 0 ? -6 : 1 - day;
+  const difference = day === 0 ? -6 : 1 - day;
 
   result.setDate(
     result.getDate() + difference
@@ -1465,9 +2577,7 @@ function parseInputDate(value: string) {
 
 function addDays(date: Date, days: number) {
   const result = new Date(date);
-
   result.setDate(result.getDate() + days);
-
   return result;
 }
 
@@ -1490,27 +2600,55 @@ function formatShortDate(date: Date) {
 }
 
 function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat(
-    "zh-CN",
-    {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    }
-  ).format(new Date(value));
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
 }
 
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat(
-    "en-US",
-    {
-      style: "currency",
-      currency: "USD",
-      minimumFractionDigits: 2,
-    }
-  ).format(value || 0);
+function formatCompactCurrency(
+  value: number,
+  currency: CurrencyCode
+) {
+  const safeValue =
+    Number.isFinite(value)
+      ? value
+      : 0;
+
+  const sign =
+    safeValue < 0 ? "-" : "";
+
+  const absoluteValue =
+    Math.abs(safeValue);
+
+  const formatted =
+    new Intl.NumberFormat(
+      "en-US",
+      {
+        notation: "compact",
+        maximumFractionDigits: 1,
+      }
+    ).format(absoluteValue);
+
+  if (currency === "MMK") {
+    return `${sign}Ks ${formatted}`;
+  }
+
+  const symbol =
+    currency === "CNY"
+      ? "¥"
+      : "$";
+
+  return `${sign}${symbol}${formatted}`;
 }
 
 function toNumber(
@@ -1528,15 +2666,18 @@ function getPaymentLabel(method: string) {
     cash: "现金 / Cash",
     card: "银行卡 / Card",
     transfer: "银行转账 / Transfer",
-    bank_transfer:
-      "银行转账 / Transfer",
+    bank_transfer: "银行转账 / Transfer",
     kbzpay: "KBZPay",
     wavepay: "WavePay",
     mobile: "电子钱包 / Mobile Pay",
+    e_wallet: "电子钱包 / E-Wallet",
+    original_payment: "原付款方式",
     other: "其他 / Other",
   };
 
-  return labels[method.toLowerCase()] ?? method;
+  return (
+    labels[method.toLowerCase()] ?? method
+  );
 }
 
 function getPaymentStatusLabel(
@@ -1549,7 +2690,7 @@ function getPaymentStatusLabel(
     refunded: "已退款",
   };
 
-  return labels[status || ""] ?? status ?? "";
+  return labels[status || ""] ?? status ?? "—";
 }
 
 function getOrderStatusLabel(
@@ -1560,15 +2701,54 @@ function getOrderStatusLabel(
     in_progress: "进行中",
     completed: "已完成",
     cancelled: "已取消",
+    refunded: "已退款",
   };
 
-  return labels[status || ""] ?? status ?? "";
+  return labels[status || ""] ?? status ?? "—";
 }
+
+function getRefundStatusLabel(
+  status: string | null
+) {
+  const labels: Record<string, string> = {
+    pending: "待处理",
+    processing: "处理中",
+    completed: "已完成",
+    failed: "失败",
+    cancelled: "已取消",
+  };
+
+  return labels[status || ""] ?? status ?? "—";
+}
+
+function getRefundTypeLabel(type: string) {
+  const labels: Record<string, string> = {
+    full: "整单退款",
+    partial: "部分退款",
+  };
+
+  return labels[type || ""] ?? type ?? "退款";
+}
+
+function getTrendLabel(value: string) {
+  const labels: Record<string, string> = {
+    grossSales: "销售总额",
+    refunds: "退款总额",
+    netRevenue: "净营业额",
+  };
+
+  return labels[value] ?? value;
+}
+
+/* =========================================================
+   页面样式
+========================================================= */
 
 const page: CSSProperties = {
   minHeight: "100vh",
   padding: "30px",
-  background: "#f8fafc",
+  background:
+    "linear-gradient(135deg,#f8fafc 0%,#eff6ff 100%)",
   color: "#0f172a",
 };
 
@@ -1751,6 +2931,68 @@ const summaryValue: CSSProperties = {
   lineHeight: 1,
 };
 
+const periodGrid: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(auto-fit,minmax(260px,1fr))",
+  gap: 16,
+  marginBottom: 20,
+};
+
+const periodCard: CSSProperties = {
+  padding: 20,
+  background: "#ffffff",
+  border: "1px solid #e2e8f0",
+  borderRadius: 18,
+  boxShadow:
+    "0 10px 30px rgba(15,23,42,.05)",
+};
+
+const periodHeader: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 12,
+  marginBottom: 15,
+};
+
+const periodIcon: CSSProperties = {
+  width: 42,
+  height: 42,
+  display: "grid",
+  placeItems: "center",
+  borderRadius: 12,
+  fontSize: 20,
+};
+
+const periodTitle: CSSProperties = {
+  display: "block",
+  fontSize: 15,
+};
+
+const periodEnglish: CSSProperties = {
+  display: "block",
+  marginTop: 3,
+  color: "#94a3b8",
+  fontSize: 10,
+  fontWeight: 700,
+  textTransform: "uppercase",
+};
+
+const periodNetValue: CSSProperties = {
+  display: "block",
+  marginBottom: 12,
+  fontSize: 27,
+};
+
+const periodMeta: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  flexWrap: "wrap",
+  gap: 8,
+  color: "#64748b",
+  fontSize: 12,
+};
+
 const largeChartCard: CSSProperties = {
   marginBottom: 20,
   padding: 22,
@@ -1783,6 +3025,7 @@ const sectionHeader: CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
+  flexWrap: "wrap",
   gap: 15,
   marginBottom: 18,
 };
@@ -1800,14 +3043,33 @@ const sectionTitle: CSSProperties = {
   fontSize: 20,
 };
 
+const sectionTotals: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  flexWrap: "wrap",
+  gap: 12,
+};
+
+const grossTotalText: CSSProperties = {
+  color: "#2563eb",
+  fontSize: 12,
+  fontWeight: 800,
+};
+
+const refundTotalText: CSSProperties = {
+  color: "#dc2626",
+  fontSize: 12,
+  fontWeight: 800,
+};
+
 const sectionTotal: CSSProperties = {
   color: "#16a34a",
-  fontSize: 20,
+  fontSize: 18,
 };
 
 const chartHeight: CSSProperties = {
   width: "100%",
-  height: 330,
+  height: 350,
 };
 
 const mediumChartHeight: CSSProperties = {
@@ -1829,13 +3091,56 @@ const emptyIcon: CSSProperties = {
   fontSize: 34,
 };
 
+const operationsCard: CSSProperties = {
+  marginBottom: 20,
+  padding: 20,
+  background: "#ffffff",
+  border: "1px solid #e2e8f0",
+  borderRadius: 20,
+  boxShadow:
+    "0 10px 30px rgba(15,23,42,.05)",
+};
+
+const operationsGrid: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(auto-fit,minmax(190px,1fr))",
+  gap: 12,
+};
+
+const operationItem: CSSProperties = {
+  padding: 16,
+  border: "1px solid #e2e8f0",
+  borderRadius: 14,
+  background: "#f8fafc",
+};
+
+const operationLabel: CSSProperties = {
+  display: "block",
+  marginBottom: 7,
+  color: "#64748b",
+  fontSize: 11,
+  fontWeight: 800,
+};
+
+const operationValue: CSSProperties = {
+  display: "block",
+  fontSize: 17,
+};
+
 const tableCard: CSSProperties = {
+  marginBottom: 20,
   padding: 22,
   background: "#ffffff",
   border: "1px solid #e2e8f0",
   borderRadius: 20,
   boxShadow:
     "0 10px 30px rgba(15,23,42,.05)",
+};
+
+const refundTableCard: CSSProperties = {
+  ...tableCard,
+  borderTop: "4px solid #dc2626",
 };
 
 const orderCountBadge: CSSProperties = {
@@ -1847,6 +3152,15 @@ const orderCountBadge: CSSProperties = {
   fontWeight: 800,
 };
 
+const refundCountBadge: CSSProperties = {
+  padding: "7px 11px",
+  borderRadius: 999,
+  background: "#fef2f2",
+  color: "#b91c1c",
+  fontSize: 12,
+  fontWeight: 800,
+};
+
 const tableWrapper: CSSProperties = {
   width: "100%",
   overflowX: "auto",
@@ -1854,7 +3168,13 @@ const tableWrapper: CSSProperties = {
 
 const table: CSSProperties = {
   width: "100%",
-  minWidth: 950,
+  minWidth: 1120,
+  borderCollapse: "collapse",
+};
+
+const refundTable: CSSProperties = {
+  width: "100%",
+  minWidth: 1050,
   borderCollapse: "collapse",
 };
 
@@ -1883,8 +3203,23 @@ const customerCell: CSSProperties = {
   gap: 3,
 };
 
+const reasonCell: CSSProperties = {
+  display: "flex",
+  maxWidth: 260,
+  flexDirection: "column",
+  gap: 4,
+};
+
 const moneyText: CSSProperties = {
   color: "#15803d",
+};
+
+const refundMoneyText: CSSProperties = {
+  color: "#dc2626",
+};
+
+const refundNumberText: CSSProperties = {
+  color: "#b91c1c",
 };
 
 const statusBadge: CSSProperties = {

@@ -1,6 +1,6 @@
 import type { Service } from "../../types/database";
 import type { Package } from "../../services/packageService";
-import { formatCurrency } from "../../utils/currency";
+import useCurrency from "../../hooks/useCurrency";
 
 type Props = {
   service?: Service;
@@ -15,6 +15,11 @@ function ItemDetailModal({
   onClose,
   onBook,
 }: Props) {
+  const {
+    formatMoney,
+    displayCurrency,
+  } = useCurrency();
+
   if (!service && !packageItem) {
     return null;
   }
@@ -44,6 +49,17 @@ function ItemDetailModal({
   const price = isPackage
     ? Number(packageItem?.package_price || 0)
     : Number(service?.price || 0);
+
+  const originalPrice = isPackage
+    ? Number(packageItem?.original_price || 0)
+    : 0;
+
+  const savings = isPackage
+    ? Math.max(originalPrice - price, 0)
+    : 0;
+
+  const showOriginalPrice =
+    isPackage && originalPrice > price;
 
   const includedServices =
     packageItem?.package_services
@@ -127,10 +143,18 @@ function ItemDetailModal({
                     >
                       <span style={checkIcon}>✓</span>
 
-                      <div>
-                        <strong>
-                          {item?.service_name}
-                        </strong>
+                      <div style={includedServiceContent}>
+                        <div style={includedServiceHeader}>
+                          <strong>
+                            {item?.service_name}
+                          </strong>
+
+                          <span style={includedServicePrice}>
+                            {formatMoney(
+                              Number(item?.price || 0)
+                            )}
+                          </span>
+                        </div>
 
                         {item?.service_name_en && (
                           <small style={includedEnglish}>
@@ -219,12 +243,27 @@ function ItemDetailModal({
                   : "服务价格 / Service Price"}
               </p>
 
+              {showOriginalPrice && (
+                <span style={originalPriceStyle}>
+                  原价 / Original{" "}
+                  {formatMoney(originalPrice)}
+                </span>
+              )}
+
               <strong style={priceStyle}>
-                {formatCurrency(price)}
+                {formatMoney(price)}
               </strong>
+
+              {savings > 0 && (
+                <span style={savingStyle}>
+                  节省 / Save {formatMoney(savings)}
+                </span>
+              )}
             </div>
 
-            
+            <span style={currencyBadge}>
+              显示货币 / Currency: {displayCurrency}
+            </span>
           </div>
 
           <div style={footer}>
@@ -388,6 +427,25 @@ const includedItem = {
   color: "#334155",
 };
 
+const includedServiceContent = {
+  minWidth: 0,
+  flex: 1,
+};
+
+const includedServiceHeader = {
+  display: "flex",
+  alignItems: "flex-start",
+  justifyContent: "space-between",
+  gap: 12,
+};
+
+const includedServicePrice = {
+  flexShrink: 0,
+  color: "#2563eb",
+  fontSize: 12,
+  fontWeight: 900,
+};
+
 const checkIcon = {
   color: "#16a34a",
   fontWeight: 900,
@@ -486,6 +544,14 @@ const priceLabel = {
   fontWeight: 800,
 };
 
+const originalPriceStyle = {
+  display: "block",
+  marginTop: 7,
+  color: "#94a3b8",
+  fontSize: 12,
+  textDecoration: "line-through",
+};
+
 const priceStyle = {
   display: "block",
   marginTop: 5,
@@ -493,6 +559,24 @@ const priceStyle = {
   fontSize: 31,
 };
 
+const savingStyle = {
+  display: "block",
+  marginTop: 7,
+  color: "#15803d",
+  fontSize: 12,
+  fontWeight: 900,
+};
+
+const currencyBadge = {
+  padding: "7px 10px",
+  border: "1px solid #bfdbfe",
+  borderRadius: 999,
+  background: "#ffffff",
+  color: "#1d4ed8",
+  fontSize: 10,
+  fontWeight: 900,
+  whiteSpace: "nowrap" as const,
+};
 
 const footer = {
   display: "flex",

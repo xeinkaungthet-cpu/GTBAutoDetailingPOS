@@ -15,6 +15,7 @@ import Footer from "../components/menu/Footer";
 import PackageCard from "../components/menu/PackageCard";
 import { QRCodeSVG } from "qrcode.react";
 import ItemDetailModal from "../components/menu/ItemDetailModal";
+import useCurrency from "../hooks/useCurrency";
 type ViewMode =
   | "all"
   | "packages"
@@ -57,6 +58,13 @@ const defaultBusinessProfile: PublicBusinessProfile = {
 };
 
 function CustomerMenu() {
+  const {
+    displayCurrency,
+    accountingCurrency,
+    loading: currencyLoading,
+    error: currencyError,
+  } = useCurrency();
+
   const [services, setServices] = useState<Service[]>([]);
   const [packages, setPackages] = useState<Package[]>([]);
   const [businessProfile, setBusinessProfile] =
@@ -408,6 +416,48 @@ function scrollToTop() {
   </div>
 </div>
 
+        <section
+          style={currencyPanel}
+          aria-label="客户菜单货币信息"
+        >
+          <div style={currencyPanelInfo}>
+            <span style={currencyPanelEyebrow}>
+              MENU CURRENCY
+            </span>
+
+            <strong style={currencyPanelTitle}>
+              价格显示货币：{displayCurrency}
+            </strong>
+
+            <p style={currencyPanelNote}>
+              服务和套餐价格会跟随系统显示货币自动更新。
+              账本基础货币保持 {accountingCurrency}，不会修改数据库原始金额。
+            </p>
+
+            {currencyLoading && (
+              <span style={currencyLoadingText}>
+                正在读取汇率设置……
+              </span>
+            )}
+
+            {currencyError && (
+              <span style={currencyErrorText}>
+                汇率设置读取失败：{currencyError}
+              </span>
+            )}
+          </div>
+
+          <div style={currencyBadgeRow}>
+            <span style={currencyDisplayBadge}>
+              显示 · {displayCurrency}
+            </span>
+
+            <span style={currencyAccountingBadge}>
+              账本 · {accountingCurrency}
+            </span>
+          </div>
+        </section>
+
 <div style={searchPanel}>
           <form
             onSubmit={handleSearchSubmit}
@@ -650,7 +700,7 @@ function scrollToTop() {
                   {visiblePackages.map(
                     (item) => (
                       <PackageCard
-  key={item.id}
+  key={`${item.id}-${displayCurrency}`}
   packageItem={item}
   onBook={(packageItem) =>
     setDetailPackage(packageItem)
@@ -695,7 +745,7 @@ function scrollToTop() {
                 {visibleCategories.map(
                   (category) => (
                     <CategorySection
-                      key={category}
+                      key={`${category}-${displayCurrency}`}
                       title={category}
                       services={visibleServices.filter(
                         (service) =>
@@ -793,6 +843,7 @@ function scrollToTop() {
       </section>
 {detailService && (
   <ItemDetailModal
+    key={`service-detail-${detailService.id}-${displayCurrency}`}
     service={detailService}
     onClose={() =>
       setDetailService(null)
@@ -806,6 +857,7 @@ function scrollToTop() {
 
 {detailPackage && (
   <ItemDetailModal
+    key={`package-detail-${detailPackage.id}-${displayCurrency}`}
     packageItem={detailPackage}
     onClose={() =>
       setDetailPackage(null)
@@ -1111,6 +1163,91 @@ const totalBadge = {
   fontSize: 13,
   fontWeight: 900,
   whiteSpace: "nowrap" as const,
+};
+
+const currencyPanel = {
+  marginTop: 20,
+  padding: "17px 19px",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  flexWrap: "wrap" as const,
+  gap: 16,
+  border: "1px solid #bfdbfe",
+  borderRadius: 18,
+  background:
+    "linear-gradient(135deg, #eff6ff 0%, #ffffff 100%)",
+  boxShadow:
+    "0 10px 28px rgba(37,99,235,.07)",
+};
+
+const currencyPanelInfo = {
+  minWidth: 240,
+  flex: 1,
+};
+
+const currencyPanelEyebrow = {
+  display: "block",
+  marginBottom: 5,
+  color: "#2563eb",
+  fontSize: 10,
+  fontWeight: 900,
+  letterSpacing: "1.2px",
+};
+
+const currencyPanelTitle = {
+  display: "block",
+  color: "#0f172a",
+  fontSize: 16,
+};
+
+const currencyPanelNote = {
+  margin: "6px 0 0",
+  color: "#64748b",
+  fontSize: 12,
+  lineHeight: 1.65,
+};
+
+const currencyLoadingText = {
+  display: "block",
+  marginTop: 7,
+  color: "#1d4ed8",
+  fontSize: 11,
+  fontWeight: 750,
+};
+
+const currencyErrorText = {
+  display: "block",
+  marginTop: 7,
+  color: "#b91c1c",
+  fontSize: 11,
+  fontWeight: 750,
+};
+
+const currencyBadgeRow = {
+  display: "flex",
+  flexWrap: "wrap" as const,
+  justifyContent: "flex-end",
+  gap: 8,
+};
+
+const currencyDisplayBadge = {
+  padding: "8px 12px",
+  borderRadius: 999,
+  background: "#2563eb",
+  color: "#ffffff",
+  fontSize: 11,
+  fontWeight: 900,
+};
+
+const currencyAccountingBadge = {
+  padding: "8px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 999,
+  background: "#ffffff",
+  color: "#475569",
+  fontSize: 11,
+  fontWeight: 900,
 };
 
 const searchPanel = {

@@ -1,4 +1,5 @@
 import type { Service } from "../../types/database";
+import useCurrency from "../../hooks/useCurrency";
 
 type Props = {
   service: Service;
@@ -9,9 +10,16 @@ type Props = {
 function ServiceCard({ service, quantity, onClick }: Props) {
   const added = quantity > 0;
 
+  const { formatMoney, currentOption, accountingOption } =
+    useCurrency();
+
+  const servicePrice = Number(service.price) || 0;
+
   return (
     <button
+      type="button"
       onClick={onClick}
+      title={`账本货币 ${accountingOption.code} · 当前显示 ${currentOption.code}`}
       style={{
         ...card,
         border: added
@@ -34,7 +42,9 @@ function ServiceCard({ service, quantity, onClick }: Props) {
           <div style={placeholder}>🚗</div>
         )}
 
-        {added && <span style={quantityBadge}>×{quantity}</span>}
+        {added && (
+          <span style={quantityBadge}>×{quantity}</span>
+        )}
       </div>
 
       <div style={content}>
@@ -46,7 +56,9 @@ function ServiceCard({ service, quantity, onClick }: Props) {
         </div>
 
         <div style={metaRow}>
-          <span style={categoryBadge}>{service.category}</span>
+          <span style={categoryBadge}>
+            {service.category}
+          </span>
 
           <span style={duration}>
             ⏱ {service.duration_minutes || 0} min
@@ -54,9 +66,15 @@ function ServiceCard({ service, quantity, onClick }: Props) {
         </div>
 
         <div style={footer}>
-          <strong style={price}>
-            ${Number(service.price).toFixed(2)}
-          </strong>
+          <div>
+            <strong style={price}>
+              {formatMoney(servicePrice)}
+            </strong>
+
+            <span style={currencyHint}>
+              {currentOption.code}
+            </span>
+          </div>
 
           <span
             style={{
@@ -102,7 +120,8 @@ const placeholder = {
   alignItems: "center",
   justifyContent: "center",
   fontSize: 48,
-  background: "linear-gradient(135deg,#dbeafe,#e0e7ff)",
+  background:
+    "linear-gradient(135deg,#dbeafe,#e0e7ff)",
 };
 
 const quantityBadge = {
@@ -159,14 +178,26 @@ const footer = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
+  gap: 12,
 };
 
 const price = {
+  display: "block",
   fontSize: 22,
   color: "#111827",
 };
 
+const currencyHint = {
+  display: "block",
+  marginTop: 2,
+  color: "#94a3b8",
+  fontSize: 10,
+  fontWeight: 800,
+  letterSpacing: ".6px",
+};
+
 const status = {
+  flexShrink: 0,
   fontSize: 14,
   fontWeight: 800,
 };

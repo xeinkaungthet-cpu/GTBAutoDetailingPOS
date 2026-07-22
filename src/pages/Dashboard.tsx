@@ -13,6 +13,7 @@ import {
 } from "recharts";
 
 import { supabase } from "../lib/supabase";
+import useCurrency from "../hooks/useCurrency";
 
 type RangeType = "7d" | "30d" | "month";
 
@@ -42,6 +43,13 @@ type ChartPoint = {
 };
 
 function Dashboard() {
+  const {
+    formatMoney: formatDisplayMoney,
+    convertToDisplay,
+    displayCurrency,
+    accountingCurrency,
+  } = useCurrency();
+
   const [orders, setOrders] = useState<DashboardOrder[]>([]);
   const [members, setMembers] = useState<any[]>([]);
   const [vehicles, setVehicles] = useState<any[]>([]);
@@ -322,6 +330,29 @@ function Dashboard() {
         </div>
       </div>
 
+      <section style={currencyInfoPanel}>
+        <div style={currencyInfoItem}>
+          <span style={currencyInfoLabel}>当前显示货币</span>
+          <strong style={currencyInfoValue}>
+            {displayCurrency}
+          </strong>
+        </div>
+
+        <div style={currencyInfoDivider} />
+
+        <div style={currencyInfoItem}>
+          <span style={currencyInfoLabel}>账本基础货币</span>
+          <strong style={currencyInfoValue}>
+            {accountingCurrency}
+          </strong>
+        </div>
+
+        <p style={currencyInfoNote}>
+          Dashboard 金额与图表会自动换算为当前显示货币；
+          Supabase 订单金额继续保留账本基础货币。
+        </p>
+      </section>
+
       {errorMessage && (
         <div style={errorBox}>
           数据加载失败：{errorMessage}
@@ -340,7 +371,7 @@ function Dashboard() {
       >
         <StatCard
           title="今日营业额"
-          value={formatMoney(todaySales)}
+          value={formatDisplayMoney(todaySales)}
           icon="💰"
           bg="#dcfce7"
           border="#16a34a"
@@ -426,7 +457,7 @@ function Dashboard() {
             </p>
 
             <div style={marketValue}>
-              {formatMoney(periodSales)}
+              {formatDisplayMoney(periodSales)}
             </div>
           </div>
 
@@ -442,17 +473,17 @@ function Dashboard() {
         >
           <ChartStat
             title="上一周期"
-            value={formatMoney(previousPeriodSales)}
+            value={formatDisplayMoney(previousPeriodSales)}
           />
 
           <ChartStat
             title="日均营业额"
-            value={formatMoney(averageDailySales)}
+            value={formatDisplayMoney(averageDailySales)}
           />
 
           <ChartStat
             title="最高单日"
-            value={formatMoney(
+            value={formatDisplayMoney(
               highestDay?.revenue ?? 0
             )}
             subtitle={highestDay?.fullDate ?? "暂无数据"}
@@ -466,7 +497,7 @@ function Dashboard() {
         background: chartColor,
       }}
     />
-    每日营业额
+    每日营业额 · {displayCurrency}
   </span>
 
   <span style={legendItem}>
@@ -543,11 +574,21 @@ function Dashboard() {
                   fill: "#6b7280",
                   fontSize: 12,
                 }}
-                tickFormatter={formatCompactMoney}
+                tickFormatter={(value) =>
+                  formatCompactDisplayMoney(
+                    Number(value),
+                    convertToDisplay,
+                    displayCurrency
+                  )
+                }
               />
 
               <Tooltip
-                content={<RevenueTooltip />}
+                content={
+                  <RevenueTooltip
+                    formatMoney={formatDisplayMoney}
+                  />
+                }
                 cursor={{
                   stroke: chartColor,
                   strokeDasharray: "5 5",
@@ -650,7 +691,11 @@ function Dashboard() {
               />
 
               <Tooltip
-                content={<OrderVolumeTooltip />}
+                content={
+                  <OrderVolumeTooltip
+                    formatMoney={formatDisplayMoney}
+                  />
+                }
                 cursor={{
                   fill: "rgba(37, 99, 235, 0.08)",
                 }}
@@ -673,7 +718,7 @@ function Dashboard() {
       >
         <StatCard
           title="本月营业额"
-          value={formatMoney(monthSales)}
+          value={formatDisplayMoney(monthSales)}
           icon="📈"
           bg="#fef9c3"
           border="#ca8a04"
@@ -681,7 +726,7 @@ function Dashboard() {
 
         <StatCard
           title="本月平均客单价"
-          value={formatMoney(avgOrder)}
+          value={formatDisplayMoney(avgOrder)}
           icon="📊"
           bg="#e0f2fe"
           border="#0284c7"
@@ -732,7 +777,7 @@ function Dashboard() {
                     margin: "8px 0 0",
                   }}
                 >
-                  {formatMoney(
+                  {formatDisplayMoney(
                     Number(order.total || 0)
                   )}
                 </h3>
@@ -904,7 +949,7 @@ function TrendBadge({
         }}
       >
         ● 新增
-        {!compact && ` · ${label}为 $0`}
+        {!compact && ` · ${label}暂无基准`}
       </div>
     );
   }
@@ -978,7 +1023,14 @@ function ChartStat({
 function RevenueTooltip({
   active,
   payload,
-}: any) {
+  formatMoney,
+}: {
+  active?: boolean;
+  payload?: Array<{
+    payload: ChartPoint;
+  }>;
+  formatMoney: (value: number) => string;
+}) {
   if (!active || !payload?.length) {
     return null;
   }
@@ -1049,7 +1101,14 @@ function RevenueTooltip({
 function OrderVolumeTooltip({
   active,
   payload,
-}: any) {
+  formatMoney,
+}: {
+  active?: boolean;
+  payload?: Array<{
+    payload: ChartPoint;
+  }>;
+  formatMoney: (value: number) => string;
+}) {
   if (!active || !payload?.length) {
     return null;
   }
@@ -1334,20 +1393,41 @@ function formatFullDate(date: Date) {
   }月${date.getDate()}日`;
 }
 
-function formatMoney(value: number) {
-  return `$${Number(value || 0).toFixed(2)}`;
-}
+function formatCompactDisplayMoney(
+  accountingValue: number,
+  convertToDisplay: (value: number) => number,
+  displayCurrency: string
+) {
+  const convertedValue = convertToDisplay(
+    Number.isFinite(accountingValue)
+      ? accountingValue
+      : 0
+  );
 
-function formatCompactMoney(value: number) {
-  if (value >= 1000000) {
-    return `$${(value / 1000000).toFixed(1)}M`;
+  const absoluteValue = Math.abs(convertedValue);
+  const sign = convertedValue < 0 ? "-" : "";
+
+  if (absoluteValue >= 1_000_000_000) {
+    return `${sign}${displayCurrency} ${(
+      absoluteValue / 1_000_000_000
+    ).toFixed(1)}B`;
   }
 
-  if (value >= 1000) {
-    return `$${(value / 1000).toFixed(1)}K`;
+  if (absoluteValue >= 1_000_000) {
+    return `${sign}${displayCurrency} ${(
+      absoluteValue / 1_000_000
+    ).toFixed(1)}M`;
   }
 
-  return `$${Number(value).toFixed(0)}`;
+  if (absoluteValue >= 1_000) {
+    return `${sign}${displayCurrency} ${(
+      absoluteValue / 1_000
+    ).toFixed(1)}K`;
+  }
+
+  return `${sign}${displayCurrency} ${absoluteValue.toFixed(
+    displayCurrency === "MMK" ? 0 : 1
+  )}`;
 }
 
 const header = {
@@ -1379,6 +1459,52 @@ const refreshButton = {
   borderRadius: 999,
   cursor: "pointer",
   fontWeight: 700,
+};
+
+const currencyInfoPanel = {
+  display: "flex",
+  alignItems: "center",
+  flexWrap: "wrap" as const,
+  gap: 16,
+  marginBottom: 20,
+  padding: "14px 18px",
+  border: "1px solid #bfdbfe",
+  borderRadius: 14,
+  background:
+    "linear-gradient(135deg, #eff6ff 0%, #ffffff 100%)",
+  boxShadow:
+    "0 8px 24px rgba(37, 99, 235, 0.06)",
+};
+
+const currencyInfoItem = {
+  display: "flex",
+  flexDirection: "column" as const,
+  gap: 3,
+};
+
+const currencyInfoLabel = {
+  color: "#64748b",
+  fontSize: 11,
+  fontWeight: 700,
+};
+
+const currencyInfoValue = {
+  color: "#1d4ed8",
+  fontSize: 16,
+};
+
+const currencyInfoDivider = {
+  width: 1,
+  height: 34,
+  background: "#bfdbfe",
+};
+
+const currencyInfoNote = {
+  flex: "1 1 320px",
+  margin: 0,
+  color: "#475569",
+  fontSize: 12,
+  lineHeight: 1.6,
 };
 
 const loadingBox = {

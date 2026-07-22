@@ -12,7 +12,7 @@ import { supabase } from "../lib/supabase";
 import { AuthService } from "../services/authService";
 import { hasPermission } from "../lib/permission";
 import LogoutDialog from "./LogoutDialog";
-
+import CurrencySwitcher from "./CurrencySwitcher";
 type BusinessBrand = {
   store_name: string;
   store_subtitle: string;
@@ -75,6 +75,12 @@ const menuItems = [
     permission: "packages",
   },
   {
+  to: "/follow-up-automation",
+  label: "售后自动化",
+  icon: "🤖",
+  permission: "reports",
+},
+  {
     to: "/products",
     label: "产品库存",
     icon: "📦",
@@ -87,11 +93,23 @@ const menuItems = [
     permission: "orders",
   },
   {
+  to: "/refunds",
+  label: "退款记录",
+  icon: "↩️",
+  permission: "orders",
+},
+  {
     to: "/reports",
     label: "报表",
     icon: "📈",
     permission: "reports",
   },
+  {
+  to: "/expenses",
+  label: "费用管理",
+  icon: "💸",
+  permission: "reports",
+},
   {
     to: "/inspection",
     label: "车辆验车",
@@ -394,7 +412,7 @@ function Sidebar() {
               </p>
             </div>
           </Link>
-
+<CurrencySwitcher />
           <nav style={nav}>
             {menuItems
               .filter((item) =>

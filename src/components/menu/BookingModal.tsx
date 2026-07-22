@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import type { Service } from "../../types/database";
 import type { Package } from "../../services/packageService";
 
-import { formatCurrency } from "../../utils/currency";
+import useCurrency from "../../hooks/useCurrency";
 import { supabase } from "../../lib/supabase";
 
 type Props = {
@@ -19,6 +19,24 @@ function BookingModal({
   onClose,
 }: Props) {
   const navigate = useNavigate();
+
+  const {
+    formatMoney: formatDisplayMoney,
+    displayCurrency,
+    accountingCurrency,
+    loading: currencyLoading,
+    error: currencyError,
+  } = useCurrency();
+
+  function formatMoney(
+    value: number | string | null | undefined
+  ): string {
+    const numberValue = Number(value ?? 0);
+
+    return formatDisplayMoney(
+      Number.isFinite(numberValue) ? numberValue : 0
+    );
+  }
 
   const [customerName, setCustomerName] = useState("");
   const [phone, setPhone] = useState("");
@@ -144,9 +162,11 @@ function BookingModal({
             packageItem.package_name_en
               ? `English: ${packageItem.package_name_en}`
               : "",
-            `套餐价格：${formatCurrency(
+            `套餐价格：${formatMoney(
               packageItem.package_price
             )}`,
+            `显示货币：${displayCurrency}`,
+            `账本货币：${accountingCurrency}`,
             packageServices.length > 0
               ? `包含服务：${packageServices
                   .map(
@@ -207,6 +227,9 @@ function BookingModal({
             : "service",
 
           bookingPrice,
+          bookingDisplayPrice: formatMoney(bookingPrice),
+          displayCurrency,
+          accountingCurrency,
 
           appointmentDate,
           appointmentTime,
@@ -304,8 +327,20 @@ function BookingModal({
             </div>
 
             <div style={servicePrice}>
-              {formatCurrency(bookingPrice)}
+              {formatMoney(bookingPrice)}
             </div>
+
+            <small style={currencyHint}>
+              {currencyLoading
+                ? "正在读取货币设置..."
+                : `显示货币：${displayCurrency}`}
+            </small>
+
+            {currencyError && (
+              <small style={currencyErrorText}>
+                汇率设置读取失败，当前价格可能使用默认货币。
+              </small>
+            )}
           </div>
         </div>
 
@@ -712,6 +747,22 @@ const servicePrice = {
   color: "#2563eb",
   fontSize: 21,
   fontWeight: 900,
+};
+
+const currencyHint = {
+  display: "block",
+  marginTop: 4,
+  color: "#64748b",
+  fontSize: 10,
+  fontWeight: 700,
+};
+
+const currencyErrorText = {
+  display: "block",
+  marginTop: 4,
+  color: "#b45309",
+  fontSize: 10,
+  lineHeight: 1.4,
 };
 
 const includedServicesBox = {

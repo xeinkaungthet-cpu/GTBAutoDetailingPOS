@@ -1,6 +1,9 @@
+import RefundOrderModal, {
+  type RefundableOrder,
+} from "../components/orders/RefundOrderModal";
 import { useEffect, useMemo, useState } from "react";
 import { OrderService } from "../services/orderService";
-import { formatCurrency } from "../utils/currency";
+import useCurrency from "../hooks/useCurrency";
 type OrderRecord = {
   id: number;
   order_no: string;
@@ -99,6 +102,10 @@ const statusOptions = [
     background: "#fef3c7",
   },
   {
+  value: "refunded",
+  label: "已退款 / Refunded",
+},
+  {
     value: "confirmed",
     label: "已确认 / Confirmed",
     color: "#1d4ed8",
@@ -129,13 +136,20 @@ function Orders() {
   const [selectedOrder, setSelectedOrder] =
     useState<OrderRecord | null>(null);
   const [items, setItems] = useState<OrderItem[]>([]);
-
+const [refundOrder, setRefundOrder] =
+  useState<RefundableOrder | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
   const [loading, setLoading] = useState(true);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
+
+  const {
+    formatMoney,
+    displayCurrency,
+    accountingCurrency,
+  } = useCurrency();
 
   async function loadOrders() {
     setLoading(true);
@@ -171,7 +185,27 @@ function Orders() {
     setSelectedOrder(null);
     setItems([]);
   }
+function canRefundOrder(
+  order: RefundableOrder | null
+): boolean {
+  if (!order) {
+    return false;
+  }
 
+  const orderStatus = String(
+    order.status || ""
+  ).toLowerCase();
+
+  const paymentStatus = String(
+    order.payment_status || ""
+  ).toLowerCase();
+
+  return (
+    paymentStatus === "paid" &&
+    orderStatus !== "refunded" &&
+    orderStatus !== "cancelled"
+  );
+}
   async function changeOrderStatus(status: string) {
     if (!selectedOrder || updatingStatus) return;
 
@@ -207,7 +241,31 @@ function Orders() {
       setUpdatingStatus(false);
     }
   }
+async function handleRefundSuccess() {
+  try {
+    const data = await OrderService.getAll();
+    const updatedOrders = data as OrderRecord[];
 
+    setOrders(updatedOrders);
+
+    setSelectedOrder((currentOrder) => {
+      if (!currentOrder) {
+        return null;
+      }
+
+      return (
+        updatedOrders.find(
+          (order) => order.id === currentOrder.id
+        ) || currentOrder
+      );
+    });
+  } catch (error: unknown) {
+    console.error(
+      "Refresh orders after refund failed:",
+      error
+    );
+  }
+}
   useEffect(() => {
     loadOrders();
   }, []);
@@ -273,17 +331,33 @@ function Orders() {
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={loadOrders}
-          disabled={loading}
-          style={{
-            ...refreshButton,
-            opacity: loading ? 0.65 : 1,
-          }}
-        >
-          {loading ? "载入中..." : "↻ 刷新订单"}
-        </button>
+        <div style={headerActions}>
+          <div style={currencyStatus}>
+            <span style={currencyStatusLabel}>
+              当前显示
+            </span>
+
+            <strong style={currencyStatusValue}>
+              {displayCurrency}
+            </strong>
+
+            <span style={currencyStatusBase}>
+              账本：{accountingCurrency}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={loadOrders}
+            disabled={loading}
+            style={{
+              ...refreshButton,
+              opacity: loading ? 0.65 : 1,
+            }}
+          >
+            {loading ? "载入中..." : "↻ 刷新订单"}
+          </button>
+        </div>
       </div>
 
       <div style={summaryGrid}>
@@ -307,8 +381,8 @@ function Orders() {
 
         <SummaryCard
           icon="💰"
-          label="订单总额 / Revenue"
-          value={formatCurrency(totalRevenue)}
+          label={`订单总额 / Revenue (${displayCurrency})`}
+          value={formatMoney(totalRevenue)}
         />
       </div>
 
@@ -418,7 +492,7 @@ function Orders() {
 
                       <td style={tableCell}>
                         <strong style={amountText}>
-                          {formatCurrency(order.total)}
+                          {formatMoney(Number(order.total) || 0)}
                         </strong>
                       </td>
 
@@ -478,7 +552,12 @@ function Orders() {
             onClick={(event) =>
               event.stopPropagation()
             }
-          >
+          ><RefundOrderModal
+  open={Boolean(refundOrder)}
+  order={refundOrder}
+  onClose={() => setRefundOrder(null)}
+  onSuccess={handleRefundSuccess}
+/>
             <div style={modalHeader}>
               <div>
                 <p style={modalEyebrow}>
@@ -527,6 +606,18 @@ function Orders() {
                 {formatDateTime(
                   selectedOrder.created_at
                 )}
+              </span>
+            </div>
+
+            <div style={modalCurrencyBar}>
+              <span>
+                当前显示货币：
+                <strong>{displayCurrency}</strong>
+              </span>
+
+              <span>
+                账本保存货币：
+                <strong>{accountingCurrency}</strong>
               </span>
             </div>
 
@@ -687,12 +778,12 @@ function Orders() {
 
         <p style={itemUnitPrice}>
           单价：
-          {formatCurrency(item.unit_price)}
+          {formatMoney(Number(item.unit_price) || 0)}
         </p>
       </div>
 
       <strong style={itemTotal}>
-        {formatCurrency(item.total)}
+        {formatMoney(Number(item.total) || 0)}
       </strong>
     </div>
   );
@@ -706,8 +797,8 @@ function Orders() {
                 <span>小计 / Subtotal</span>
 
                 <strong>
-                  {formatCurrency(
-                    selectedOrder.subtotal
+                  {formatMoney(
+                    Number(selectedOrder.subtotal) || 0
                   )}
                 </strong>
               </div>
@@ -716,9 +807,9 @@ function Orders() {
                 <span>折扣 / Discount</span>
 
                 <strong>
-                  -{" "}
-                  {formatCurrency(
-                    selectedOrder.discount
+                  −
+                  {formatMoney(
+                    Number(selectedOrder.discount) || 0
                   )}
                 </strong>
               </div>
@@ -727,11 +818,18 @@ function Orders() {
                 <span>总金额 / Total</span>
 
                 <strong style={totalPrice}>
-                  {formatCurrency(
-                    selectedOrder.total
+                  {formatMoney(
+                    Number(selectedOrder.total) || 0
                   )}
                 </strong>
               </div>
+
+              {displayCurrency !== accountingCurrency && (
+                <p style={currencyConversionNote}>
+                  当前页面金额由账本货币 {accountingCurrency}
+                  换算为 {displayCurrency} 显示，数据库订单金额保持不变。
+                </p>
+              )}
             </div>
 
             <div style={statusUpdateSection}>
@@ -768,23 +866,40 @@ function Orders() {
               )}
             </div>
 
-            <div style={modalActions}>
-              <button
-                type="button"
-                onClick={() => window.print()}
-                style={secondaryButton}
-              >
-                🖨 打印订单
-              </button>
+           <div style={modalActions}>
+  {canRefundOrder(selectedOrder) && (
+    <button
+      type="button"
+      onClick={() =>
+        setRefundOrder(selectedOrder)
+      }
+      style={{
+        ...secondaryButton,
+        color: "#dc2626",
+        borderColor: "#fecaca",
+        background: "#fff1f2",
+      }}
+    >
+      ↩ 订单退款
+    </button>
+  )}
 
-              <button
-                type="button"
-                onClick={closeOrderDetails}
-                style={primaryButton}
-              >
-                完成查看
-              </button>
-            </div>
+  <button
+    type="button"
+    onClick={() => window.print()}
+    style={secondaryButton}
+  >
+    🖨 打印订单
+  </button>
+
+  <button
+    type="button"
+    onClick={closeOrderDetails}
+    style={primaryButton}
+  >
+    完成查看
+  </button>
+</div>
           </div>
         </div>
       )}
@@ -904,6 +1019,42 @@ const pageHeader = {
   justifyContent: "space-between",
   gap: 18,
   marginBottom: 24,
+};
+
+const headerActions = {
+  display: "flex",
+  alignItems: "center",
+  gap: 12,
+};
+
+const currencyStatus = {
+  display: "grid",
+  gridTemplateColumns: "auto auto",
+  columnGap: 8,
+  rowGap: 2,
+  minWidth: 132,
+  padding: "10px 13px",
+  borderRadius: 12,
+  border: "1px solid #dbeafe",
+  background: "#eff6ff",
+};
+
+const currencyStatusLabel = {
+  color: "#64748b",
+  fontSize: 10,
+  fontWeight: 800,
+};
+
+const currencyStatusValue = {
+  color: "#1d4ed8",
+  fontSize: 14,
+  textAlign: "right" as const,
+};
+
+const currencyStatusBase = {
+  gridColumn: "1 / -1",
+  color: "#64748b",
+  fontSize: 10,
 };
 
 const eyebrow = {
@@ -1177,6 +1328,20 @@ const modalDate = {
   fontSize: 12,
 };
 
+const modalCurrencyBar = {
+  display: "flex",
+  flexWrap: "wrap" as const,
+  justifyContent: "space-between",
+  gap: 10,
+  marginTop: 14,
+  padding: "10px 13px",
+  borderRadius: 11,
+  border: "1px solid #dbeafe",
+  color: "#475569",
+  background: "#eff6ff",
+  fontSize: 11,
+};
+
 const detailGrid = {
   display: "grid",
   gridTemplateColumns:
@@ -1356,6 +1521,15 @@ const totalPriceRow = {
 const totalPrice = {
   color: "#16a34a",
   fontSize: 24,
+};
+
+const currencyConversionNote = {
+  margin: "2px 0 0",
+  paddingTop: 10,
+  borderTop: "1px dashed #cbd5e1",
+  color: "#64748b",
+  fontSize: 10,
+  lineHeight: 1.5,
 };
 
 const statusUpdateSection = {
