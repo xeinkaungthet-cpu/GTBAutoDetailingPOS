@@ -9,6 +9,51 @@ import { AppointmentService } from "../services/appointmentService";
 import { ServiceService } from "../services/serviceService";
 import useCurrency from "../hooks/useCurrency";
 
+type VehicleSizeCode =
+  | "small"
+  | "medium"
+  | "suv"
+  | "large";
+
+type AppointmentRecord = Appointment & {
+  vehicle_size_code?: VehicleSizeCode | string | null;
+  vehicle_size_name?: string | null;
+  quoted_price?: number | string | null;
+  quoted_currency?: string | null;
+  quoted_display_price?: number | string | null;
+  quoted_display_currency?: string | null;
+};
+
+const VEHICLE_SIZE_PRESETS: Record<
+  VehicleSizeCode,
+  {
+    nameZh: string;
+    nameEn: string;
+    icon: string;
+  }
+> = {
+  small: {
+    nameZh: "小型车",
+    nameEn: "Small Car",
+    icon: "🚗",
+  },
+  medium: {
+    nameZh: "中型车",
+    nameEn: "Medium Car",
+    icon: "🚘",
+  },
+  suv: {
+    nameZh: "SUV",
+    nameEn: "SUV",
+    icon: "🚙",
+  },
+  large: {
+    nameZh: "大型车",
+    nameEn: "Large Vehicle",
+    icon: "🚐",
+  },
+};
+
 const statusOptions = [
   {
     value: "pending",
@@ -52,7 +97,7 @@ function Appointments() {
   } = useCurrency();
 
   const [appointments, setAppointments] =
-    useState<Appointment[]>([]);
+    useState<AppointmentRecord[]>([]);
 
   const [services, setServices] =
     useState<Service[]>([]);
@@ -75,7 +120,9 @@ function Appointments() {
           ServiceService.getAll(),
         ]);
 
-      setAppointments(appointmentData);
+      setAppointments(
+        appointmentData as AppointmentRecord[]
+      );
       setServices(serviceData);
     } catch (error: unknown) {
       alert(getErrorMessage(error));
@@ -130,6 +177,12 @@ function Appointments() {
             ?.toLowerCase()
             .includes(keyword) ||
           appointment.vehicle_model
+            ?.toLowerCase()
+            .includes(keyword) ||
+          appointment.vehicle_size_name
+            ?.toLowerCase()
+            .includes(keyword) ||
+          appointment.vehicle_size_code
             ?.toLowerCase()
             .includes(keyword) ||
           serviceNames.includes(keyword);
@@ -357,13 +410,26 @@ function Appointments() {
                   serviceMap
                 );
 
-              const appointmentTotal =
+              const currentServiceTotal =
                 selectedServices.reduce(
                   (sum, service) =>
                     sum +
                     Number(service.price || 0),
                   0
                 );
+
+              const quotedPrice = toFiniteNumber(
+                appointment.quoted_price
+              );
+
+              const hasQuotedPrice =
+                quotedPrice !== null;
+
+              const appointmentTotal =
+                quotedPrice ?? currentServiceTotal;
+
+              const vehicleSize =
+                getVehicleSizeInfo(appointment);
 
               return (
                 <article
@@ -420,10 +486,10 @@ function Appointments() {
 
                   <div style={vehicleCard}>
                     <div style={vehicleIcon}>
-                      🚘
+                      {vehicleSize.icon}
                     </div>
 
-                    <div>
+                    <div style={vehicleContent}>
                       <p style={vehicleLabel}>
                         VEHICLE
                       </p>
@@ -434,9 +500,17 @@ function Appointments() {
                       </strong>
 
                       <p style={vehicleModel}>
+                        车辆型号：
                         {appointment.vehicle_model ||
-                          "未填写车型"}
+                          "未填写"}
                       </p>
+
+                      {vehicleSize.label && (
+                        <span style={vehicleSizeBadge}>
+                          {vehicleSize.icon} 车型大小：
+                          {vehicleSize.label}
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -477,7 +551,12 @@ function Appointments() {
                               style={servicePrice}
                             >
                               {formatDisplayMoney(
-                                Number(service.price || 0)
+                                selectedServices.length === 1 &&
+                                  hasQuotedPrice
+                                  ? appointmentTotal
+                                  : Number(
+                                      service.price || 0
+                                    )
                               )}
                             </strong>
                           </div>
@@ -493,7 +572,9 @@ function Appointments() {
 
                     <div style={totalRow}>
                       <span>
-                        预计金额 / Estimated
+                        {hasQuotedPrice
+                          ? "预约锁定价格 / Booked Quote"
+                          : "预计金额 / Estimated"}
                       </span>
 
                       <strong>
@@ -502,6 +583,15 @@ function Appointments() {
                         )}
                       </strong>
                     </div>
+
+                    {hasQuotedPrice && (
+                      <p style={quoteMeta}>
+                        已使用客户提交预约时保存的车型报价
+                        {appointment.quoted_currency
+                          ? ` · 账本货币 ${appointment.quoted_currency}`
+                          : ""}
+                      </p>
+                    )}
                   </div>
 
                   <div style={dateTimeGrid}>
@@ -642,7 +732,7 @@ function InformationItem({
 }
 
 function getAppointmentServices(
-  appointment: Appointment,
+  appointment: AppointmentRecord,
   serviceMap: Map<string, Service>
 ) {
   const serviceIds = String(
@@ -658,6 +748,76 @@ function getAppointmentServices(
       (service): service is Service =>
         Boolean(service)
     );
+}
+
+function getVehicleSizeInfo(
+  appointment: AppointmentRecord
+) {
+  const rawCode = String(
+    appointment.vehicle_size_code || ""
+  )
+    .trim()
+    .toLowerCase();
+
+  const preset =
+    rawCode in VEHICLE_SIZE_PRESETS
+      ? VEHICLE_SIZE_PRESETS[
+          rawCode as VehicleSizeCode
+        ]
+      : undefined;
+
+  const savedLabel = String(
+    appointment.vehicle_size_name || ""
+  ).trim();
+
+  const notesLabel = extractVehicleSizeFromNotes(
+    appointment.notes
+  );
+
+  const fallbackLabel = preset
+    ? Array.from(
+        new Set([preset.nameZh, preset.nameEn])
+      ).join(" / ")
+    : "";
+
+  return {
+    code: rawCode,
+    label:
+      savedLabel ||
+      notesLabel ||
+      fallbackLabel,
+    icon: preset?.icon || "🚘",
+  };
+}
+
+function extractVehicleSizeFromNotes(
+  notes?: string | null
+) {
+  if (!notes) return "";
+
+  const match = notes.match(
+    /车型大小[：:]\s*([^\n\r]+)/
+  );
+
+  return match?.[1]?.trim() || "";
+}
+
+function toFiniteNumber(
+  value: number | string | null | undefined
+) {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
+    return null;
+  }
+
+  const numberValue = Number(value);
+
+  return Number.isFinite(numberValue)
+    ? numberValue
+    : null;
 }
 
 function getStatusInfo(status?: string) {
@@ -927,6 +1087,25 @@ const vehicleCard = {
   background: "#f8fafc",
 };
 
+const vehicleContent = {
+  minWidth: 0,
+  flex: 1,
+};
+
+const vehicleSizeBadge = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 4,
+  marginTop: 8,
+  padding: "6px 9px",
+  borderRadius: 999,
+  border: "1px solid #bfdbfe",
+  background: "#eff6ff",
+  color: "#1d4ed8",
+  fontSize: 11,
+  fontWeight: 800,
+};
+
 const vehicleIcon = {
   width: 43,
   height: 43,
@@ -1004,6 +1183,14 @@ const totalRow = {
   paddingTop: 13,
   borderTop: "1px solid #e2e8f0",
   fontSize: 15,
+};
+
+const quoteMeta = {
+  margin: "9px 0 0",
+  color: "#2563eb",
+  fontSize: 10,
+  fontWeight: 700,
+  lineHeight: 1.5,
 };
 
 const dateTimeGrid = {

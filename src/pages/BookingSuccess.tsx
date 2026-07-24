@@ -1,6 +1,12 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import useCurrency from "../hooks/useCurrency";
 
+type VehicleSizeCode =
+  | "small"
+  | "medium"
+  | "suv"
+  | "large";
+
 type BookingSuccessState = {
   appointmentNo?: string;
   serviceName?: string;
@@ -10,6 +16,13 @@ type BookingSuccessState = {
   bookingDisplayPrice?: string;
   displayCurrency?: string;
   accountingCurrency?: string;
+
+  vehicleSizeCode?: VehicleSizeCode;
+  vehicleSizeName?: string;
+  vehicleSizeNameEn?: string;
+  vehicleSizeLabel?: string;
+  vehicleSizeIcon?: string;
+
   appointmentDate?: string;
   appointmentTime?: string;
   customerName?: string;
@@ -17,6 +30,36 @@ type BookingSuccessState = {
   email?: string;
   vehiclePlate?: string;
   vehicleModel?: string;
+};
+
+const VEHICLE_SIZE_PRESETS: Record<
+  VehicleSizeCode,
+  {
+    nameZh: string;
+    nameEn: string;
+    icon: string;
+  }
+> = {
+  small: {
+    nameZh: "小型车",
+    nameEn: "Small Car",
+    icon: "🚗",
+  },
+  medium: {
+    nameZh: "中型车",
+    nameEn: "Medium Car",
+    icon: "🚘",
+  },
+  suv: {
+    nameZh: "SUV",
+    nameEn: "SUV",
+    icon: "🚙",
+  },
+  large: {
+    nameZh: "大型车",
+    nameEn: "Large Vehicle",
+    icon: "🚐",
+  },
 };
 
 function BookingSuccess() {
@@ -59,6 +102,37 @@ function BookingSuccess() {
       ? "套餐 / Package"
       : "服务 / Service";
 
+  const vehicleSizePreset = booking.vehicleSizeCode
+    ? VEHICLE_SIZE_PRESETS[booking.vehicleSizeCode]
+    : undefined;
+
+  const resolvedVehicleSizeName =
+    booking.vehicleSizeName ||
+    vehicleSizePreset?.nameZh ||
+    "";
+
+  const resolvedVehicleSizeNameEn =
+    booking.vehicleSizeNameEn ||
+    vehicleSizePreset?.nameEn ||
+    "";
+
+  const resolvedVehicleSizeLabel =
+    Array.from(
+      new Set(
+        [
+          resolvedVehicleSizeName,
+          resolvedVehicleSizeNameEn,
+        ].filter(Boolean)
+      )
+    ).join(" / ") ||
+    booking.vehicleSizeLabel ||
+    "";
+
+  const resolvedVehicleSizeIcon =
+    booking.vehicleSizeIcon ||
+    vehicleSizePreset?.icon ||
+    "🚗";
+
   async function copyAppointmentNumber() {
     if (!booking.appointmentNo) return;
 
@@ -95,7 +169,10 @@ function BookingSuccess() {
       `电话：${booking.phone || "-"}`,
       `Email：${booking.email || "-"}`,
       `车牌：${booking.vehiclePlate || "-"}`,
-      `车型：${booking.vehicleModel || "-"}`,
+      resolvedVehicleSizeLabel
+        ? `车型大小：${resolvedVehicleSizeLabel}`
+        : "",
+      `车辆型号：${booking.vehicleModel || "-"}`,
       `状态：等待确认`,
       "",
       "门店工作人员将尽快联系您确认预约。",
@@ -156,6 +233,10 @@ function BookingSuccess() {
           `预约编号：${booking.appointmentNo || "-"}`,
           `预约类型：${bookingTypeLabel}`,
           `项目：${booking.serviceName || "-"}`,
+          resolvedVehicleSizeLabel
+            ? `车型大小：${resolvedVehicleSizeLabel}`
+            : "",
+          `车辆型号：${booking.vehicleModel || "-"}`,
           `价格：${formattedBookingPrice}`,
           `联系电话：${booking.phone || "-"}`,
         ].join("\n")
@@ -270,7 +351,9 @@ function BookingSuccess() {
               </div>
             </div>
 
-            <div style={carIcon}>🚘</div>
+            <div style={carIcon}>
+              {resolvedVehicleSizeIcon}
+            </div>
           </div>
 
           <div style={ticketDivider} />
@@ -290,6 +373,24 @@ function BookingSuccess() {
               <p style={serviceNameEnglish}>
                 {booking.serviceNameEn}
               </p>
+            )}
+
+            {resolvedVehicleSizeLabel && (
+              <div style={vehicleSizeBanner}>
+                <span style={vehicleSizeBannerIcon}>
+                  {resolvedVehicleSizeIcon}
+                </span>
+
+                <span>
+                  <small style={vehicleSizeBannerLabel}>
+                    车型大小 / Vehicle Size
+                  </small>
+
+                  <strong style={vehicleSizeBannerValue}>
+                    {resolvedVehicleSizeLabel}
+                  </strong>
+                </span>
+              </div>
             )}
 
             <div style={bookingPriceRow}>
@@ -362,6 +463,12 @@ function BookingSuccess() {
               label="车辆车牌"
               value={booking.vehiclePlate || "-"}
               icon="🚗"
+            />
+
+            <InformationItem
+              label="车型大小"
+              value={resolvedVehicleSizeLabel || "-"}
+              icon={resolvedVehicleSizeIcon}
             />
 
             <InformationItem
@@ -710,6 +817,46 @@ const serviceNameEnglish = {
   color: "#64748b",
   fontSize: 14,
   fontWeight: 650,
+};
+
+const vehicleSizeBanner = {
+  display: "flex",
+  alignItems: "center",
+  gap: 11,
+  marginTop: 16,
+  padding: "12px 14px",
+  border: "1px solid #bfdbfe",
+  borderRadius: 14,
+  background:
+    "linear-gradient(135deg,#eff6ff,#ffffff)",
+};
+
+const vehicleSizeBannerIcon = {
+  width: 38,
+  height: 38,
+  flexShrink: 0,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: 11,
+  background: "#dbeafe",
+  fontSize: 20,
+};
+
+const vehicleSizeBannerLabel = {
+  display: "block",
+  color: "#2563eb",
+  fontSize: 10,
+  fontWeight: 850,
+  letterSpacing: 0.4,
+};
+
+const vehicleSizeBannerValue = {
+  display: "block",
+  marginTop: 3,
+  color: "#0f172a",
+  fontSize: 14,
+  fontWeight: 850,
 };
 
 const bookingPriceRow = {

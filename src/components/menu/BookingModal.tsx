@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 
 import type { Service } from "../../types/database";
 import type { Package } from "../../services/packageService";
+import type { VehicleSizeCode } from "../../services/vehiclePricingService";
 
 import useCurrency from "../../hooks/useCurrency";
 import { supabase } from "../../lib/supabase";
@@ -10,18 +11,36 @@ import { supabase } from "../../lib/supabase";
 type Props = {
   service?: Service;
   packageItem?: Package;
+
+  vehicleSizeCode?: VehicleSizeCode;
+  vehicleSizeName?: string;
+  vehicleSizeNameEn?: string;
+  vehicleSizeIcon?: string;
+
+  /**
+   * 账本基础货币金额。客户菜单已经按车型匹配好价格后，
+   * 通过这个字段传进预约弹窗，避免再次读取旧的统一价格。
+   */
+  quotedPrice?: number;
+
   onClose: () => void;
 };
 
 function BookingModal({
   service,
   packageItem,
+  vehicleSizeCode,
+  vehicleSizeName,
+  vehicleSizeNameEn,
+  vehicleSizeIcon,
+  quotedPrice,
   onClose,
 }: Props) {
   const navigate = useNavigate();
 
   const {
     formatMoney: formatDisplayMoney,
+    convertToDisplay,
     displayCurrency,
     accountingCurrency,
     loading: currencyLoading,
@@ -72,12 +91,45 @@ function BookingModal({
     "";
 
   const bookingPrice = Number(
-    packageItem?.package_price ??
+    quotedPrice ??
+      packageItem?.package_price ??
       service?.price ??
       0
   );
 
+  const vehiclePreset = vehicleSizeCode
+    ? VEHICLE_SIZE_PRESETS[vehicleSizeCode]
+    : undefined;
 
+  const resolvedVehicleSizeName =
+    vehicleSizeName || vehiclePreset?.nameZh || "";
+
+  const resolvedVehicleSizeNameEn =
+    vehicleSizeNameEn || vehiclePreset?.nameEn || "";
+
+  const resolvedVehicleSizeIcon =
+    vehicleSizeIcon || vehiclePreset?.icon || "🚗";
+
+  const resolvedVehicleSizeLabel = [
+    resolvedVehicleSizeName,
+    resolvedVehicleSizeNameEn,
+  ]
+    .filter(Boolean)
+    .join(" / ");
+
+  const hasVehicleSize = Boolean(
+    vehicleSizeCode || resolvedVehicleSizeLabel
+  );
+
+  const convertedDisplayPrice = Number(
+    convertToDisplay(bookingPrice)
+  );
+
+  const quotedDisplayPrice = Number.isFinite(
+    convertedDisplayPrice
+  )
+    ? convertedDisplayPrice
+    : bookingPrice;
 
   const packageServices =
     packageItem?.package_services
@@ -155,33 +207,38 @@ function BookingModal({
     try {
       const appointmentNo = `APT-${Date.now()}`;
 
-      const packageNote = packageItem
-        ? [
-            `预约类型：套餐 / Package`,
-            `套餐：${packageItem.package_name}`,
-            packageItem.package_name_en
-              ? `English: ${packageItem.package_name_en}`
-              : "",
-            `套餐价格：${formatMoney(
-              packageItem.package_price
-            )}`,
-            `显示货币：${displayCurrency}`,
-            `账本货币：${accountingCurrency}`,
-            packageServices.length > 0
-              ? `包含服务：${packageServices
-                  .map(
-                    (includedService) =>
-                      includedService.service_name
-                  )
-                  .join("、")}`
-              : "",
-          ]
-            .filter(Boolean)
-            .join("\n")
-        : `预约类型：单项服务 / Service\n服务：${service?.service_name}`;
+      const bookingNote = [
+        packageItem
+          ? "预约类型：套餐 / Package"
+          : "预约类型：单项服务 / Service",
+        packageItem
+          ? `套餐：${packageItem.package_name}`
+          : `服务：${service?.service_name || "-"}`,
+        packageItem?.package_name_en
+          ? `English: ${packageItem.package_name_en}`
+          : service?.service_name_en
+            ? `English: ${service.service_name_en}`
+            : "",
+        hasVehicleSize
+          ? `车型大小：${resolvedVehicleSizeLabel}`
+          : "",
+        `预约价格：${formatMoney(bookingPrice)}`,
+        `显示货币：${displayCurrency}`,
+        `账本货币：${accountingCurrency}`,
+        packageServices.length > 0
+          ? `包含服务：${packageServices
+              .map(
+                (includedService) =>
+                  includedService.service_name
+              )
+              .join("、")}`
+          : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
 
       const combinedNotes = [
-        packageNote,
+        bookingNote,
         notes.trim()
           ? `客户备注：${notes.trim()}`
           : "",
@@ -200,6 +257,15 @@ function BookingModal({
 
             vehicle_plate: vehiclePlate.trim(),
             vehicle_model: vehicleModel.trim(),
+
+            vehicle_size_code: vehicleSizeCode || null,
+            vehicle_size_name:
+              resolvedVehicleSizeLabel || null,
+
+            quoted_price: bookingPrice,
+            quoted_currency: accountingCurrency,
+            quoted_display_price: quotedDisplayPrice,
+            quoted_display_currency: displayCurrency,
 
             service_ids: serviceIds,
 
@@ -230,6 +296,12 @@ function BookingModal({
           bookingDisplayPrice: formatMoney(bookingPrice),
           displayCurrency,
           accountingCurrency,
+
+          vehicleSizeCode,
+          vehicleSizeName: resolvedVehicleSizeName,
+          vehicleSizeNameEn: resolvedVehicleSizeNameEn,
+          vehicleSizeLabel: resolvedVehicleSizeLabel,
+          vehicleSizeIcon: resolvedVehicleSizeIcon,
 
           appointmentDate,
           appointmentTime,
@@ -292,6 +364,24 @@ function BookingModal({
             : "🚗 服务预约 / Service Booking"}
         </div>
 
+        {hasVehicleSize && (
+          <div style={vehicleSizeSummary}>
+            <span style={vehicleSizeSummaryIcon}>
+              {resolvedVehicleSizeIcon}
+            </span>
+
+            <span>
+              <small style={vehicleSizeSummaryEyebrow}>
+                已选车型大小 / Selected Vehicle Size
+              </small>
+
+              <strong style={vehicleSizeSummaryName}>
+                {resolvedVehicleSizeLabel}
+              </strong>
+            </span>
+          </div>
+        )}
+
         <div style={serviceSummary}>
           {bookingImage ? (
             <img
@@ -323,7 +413,13 @@ function BookingModal({
                   : service?.category || "Service"}
               </span>
 
-              
+              {hasVehicleSize && (
+                <span style={vehicleSizeInlineBadge}>
+                  {resolvedVehicleSizeIcon}{" "}
+                  {resolvedVehicleSizeName ||
+                    resolvedVehicleSizeNameEn}
+                </span>
+              )}
             </div>
 
             <div style={servicePrice}>
@@ -566,6 +662,36 @@ function BookingModal({
   );
 }
 
+const VEHICLE_SIZE_PRESETS: Record<
+  VehicleSizeCode,
+  {
+    nameZh: string;
+    nameEn: string;
+    icon: string;
+  }
+> = {
+  small: {
+    nameZh: "小型车",
+    nameEn: "Small Car",
+    icon: "🚗",
+  },
+  medium: {
+    nameZh: "中型车",
+    nameEn: "Medium Car",
+    icon: "🚘",
+  },
+  suv: {
+    nameZh: "SUV",
+    nameEn: "SUV",
+    icon: "🚙",
+  },
+  large: {
+    nameZh: "大型车",
+    nameEn: "Large Vehicle",
+    icon: "🚐",
+  },
+};
+
 function getTodayDate() {
   const now = new Date();
 
@@ -675,6 +801,51 @@ const bookingTypeBadge = {
   fontWeight: 900,
 };
 
+const vehicleSizeSummary = {
+  display: "flex",
+  alignItems: "center",
+  gap: 12,
+
+  marginTop: 14,
+  padding: "12px 14px",
+
+  border: "1px solid #bfdbfe",
+  borderRadius: 14,
+
+  background: "#eff6ff",
+  color: "#1e3a8a",
+};
+
+const vehicleSizeSummaryIcon = {
+  width: 42,
+  height: 42,
+
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+
+  flexShrink: 0,
+  borderRadius: 12,
+  background: "#dbeafe",
+  fontSize: 22,
+};
+
+const vehicleSizeSummaryEyebrow = {
+  display: "block",
+  marginBottom: 3,
+
+  color: "#2563eb",
+  fontSize: 10,
+  fontWeight: 900,
+  letterSpacing: 0.7,
+};
+
+const vehicleSizeSummaryName = {
+  display: "block",
+  color: "#0f172a",
+  fontSize: 14,
+};
+
 const serviceSummary = {
   display: "flex",
   alignItems: "center",
@@ -741,6 +912,21 @@ const serviceMeta = {
 
   color: "#64748b",
   fontSize: 13,
+};
+
+const vehicleSizeInlineBadge = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 4,
+
+  padding: "3px 8px",
+  borderRadius: 999,
+
+  background: "#dbeafe",
+  color: "#1d4ed8",
+
+  fontSize: 11,
+  fontWeight: 800,
 };
 
 const servicePrice = {

@@ -19,6 +19,7 @@ import Products from "../pages/Products";
 import Packages from "../pages/Packages";
 import Orders from "../pages/Orders";
 import Reports from "../pages/Reports";
+import Expenses from "../pages/Expenses";
 import Employees from "../pages/Employees";
 import Settings from "../pages/Settings";
 import Appointments from "../pages/Appointments";
@@ -209,7 +210,14 @@ function AppRouter() {
           </ProtectedPage>
         }
       />
-
+<Route
+  path="/expenses"
+  element={
+    <ProtectedPage permission="reports">
+      <Expenses />
+    </ProtectedPage>
+  }
+/>
       <Route
         path="/inspection"
         element={

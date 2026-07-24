@@ -8,6 +8,12 @@ import type { Service } from "../types/database";
 import { ServiceService } from "../services/serviceService";
 import type { Package } from "../services/packageService";
 import { PackageService } from "../services/packageService";
+import VehiclePricingService, {
+  type PackageVehiclePrice,
+  type ServiceVehiclePrice,
+  type VehicleSizeCode,
+  type VehicleSizeOption,
+} from "../services/vehiclePricingService";
 import Hero from "../components/menu/Hero";
 import CategorySection from "../components/menu/CategorySection";
 import BookingModal from "../components/menu/BookingModal";
@@ -60,6 +66,25 @@ const defaultBusinessProfile: PublicBusinessProfile = {
 function CustomerMenu() {
   const [services, setServices] = useState<Service[]>([]);
   const [packages, setPackages] = useState<Package[]>([]);
+
+  const [vehicleSizes, setVehicleSizes] = useState<
+    VehicleSizeOption[]
+  >([]);
+
+  const [
+    serviceVehiclePrices,
+    setServiceVehiclePrices,
+  ] = useState<ServiceVehiclePrice[]>([]);
+
+  const [
+    packageVehiclePrices,
+    setPackageVehiclePrices,
+  ] = useState<PackageVehiclePrice[]>([]);
+
+  const [
+    selectedVehicleSize,
+    setSelectedVehicleSize,
+  ] = useState<VehicleSizeCode>("small");
   const [businessProfile, setBusinessProfile] =
     useState<PublicBusinessProfile>(
       defaultBusinessProfile
@@ -96,10 +121,16 @@ const [detailPackage, setDetailPackage] =
       const [
         servicesData,
         packagesData,
+        vehicleSizeData,
+        serviceVehiclePriceData,
+        packageVehiclePriceData,
         profileResponse,
       ] = await Promise.all([
         ServiceService.getAll(),
         PackageService.getActive(),
+        VehiclePricingService.getVehicleSizes(true),
+        VehiclePricingService.getAllServicePrices(true),
+        VehiclePricingService.getAllPackagePrices(true),
         supabase.rpc(
           "get_public_business_profile"
         ),
@@ -107,6 +138,25 @@ const [detailPackage, setDetailPackage] =
 
       setServices(servicesData);
       setPackages(packagesData);
+      setVehicleSizes(vehicleSizeData);
+      setServiceVehiclePrices(
+        serviceVehiclePriceData
+      );
+      setPackageVehiclePrices(
+        packageVehiclePriceData
+      );
+
+      if (
+        vehicleSizeData.length > 0 &&
+        !vehicleSizeData.some(
+          (option) =>
+            option.code === selectedVehicleSize
+        )
+      ) {
+        setSelectedVehicleSize(
+          vehicleSizeData[0].code
+        );
+      }
 
       if (profileResponse.error) {
         console.error(
@@ -172,13 +222,98 @@ const [detailPackage, setDetailPackage] =
     loadMenu();
   }, []);
 
+  const selectedVehicleOption = useMemo(
+    () =>
+      vehicleSizes.find(
+        (option) =>
+          option.code === selectedVehicleSize
+      ) ?? null,
+    [vehicleSizes, selectedVehicleSize]
+  );
+
+  const pricedServices = useMemo(
+    () =>
+      services.flatMap((service) => {
+        const vehiclePrice =
+          serviceVehiclePrices.find(
+            (priceRow) =>
+              Number(priceRow.service_id) ===
+                Number(service.id) &&
+              priceRow.vehicle_size_code ===
+                selectedVehicleSize &&
+              priceRow.is_active
+          );
+
+        if (!vehiclePrice) {
+          return [];
+        }
+
+        return [
+          {
+            ...service,
+            price: Number(vehiclePrice.price),
+            cost_price: Number(
+              vehiclePrice.cost_price
+            ),
+            duration_minutes: Number(
+              vehiclePrice.duration_minutes
+            ),
+            is_active:
+              service.is_active !== false &&
+              vehiclePrice.is_active,
+          } as Service,
+        ];
+      }),
+    [
+      services,
+      serviceVehiclePrices,
+      selectedVehicleSize,
+    ]
+  );
+
+  const pricedPackages = useMemo(
+    () =>
+      packages.flatMap((packageItem) => {
+        const vehiclePrice =
+          packageVehiclePrices.find(
+            (priceRow) =>
+              Number(priceRow.package_id) ===
+                Number(packageItem.id) &&
+              priceRow.vehicle_size_code ===
+                selectedVehicleSize &&
+              priceRow.is_active
+          );
+
+        if (!vehiclePrice) {
+          return [];
+        }
+
+        return [
+          {
+            ...packageItem,
+            package_price: Number(
+              vehiclePrice.price
+            ),
+            estimated_minutes: Number(
+              vehiclePrice.duration_minutes
+            ),
+          } as Package,
+        ];
+      }),
+    [
+      packages,
+      packageVehiclePrices,
+      selectedVehicleSize,
+    ]
+  );
+
   const activeServices = useMemo(
     () =>
-      services.filter(
+      pricedServices.filter(
         (service) =>
           service.is_active !== false
       ),
-    [services]
+    [pricedServices]
   );
 
   const categories = useMemo(() => {
@@ -195,12 +330,12 @@ const [detailPackage, setDetailPackage] =
 
   const filteredPackages = useMemo(
     () =>
-      packages.filter((packageItem) =>
+      pricedPackages.filter((packageItem) =>
         getPackageSearchText(
           packageItem
         ).includes(normalizedQuery)
       ),
-    [packages, normalizedQuery]
+    [pricedPackages, normalizedQuery]
   );
 
   const filteredServices = useMemo(
@@ -290,6 +425,17 @@ const [detailPackage, setDetailPackage] =
     }
   }
 
+  function changeVehicleSize(
+    vehicleSizeCode: VehicleSizeCode
+  ) {
+    setSelectedVehicleSize(vehicleSizeCode);
+
+    setDetailService(null);
+    setDetailPackage(null);
+    setSelectedService(null);
+    setSelectedPackage(null);
+  }
+
   function clearSearch() {
     setSearchQuery("");
     setSelectedCategory("全部");
@@ -370,6 +516,11 @@ function scrollToTop() {
             .customer-brand-meta {
               grid-template-columns: 1fr !important;
             }
+
+            .vehicle-size-grid {
+              grid-template-columns:
+                repeat(2, minmax(0, 1fr)) !important;
+            }
           }
         `}
       </style>
@@ -403,11 +554,139 @@ function scrollToTop() {
   </div>
 
   <div style={totalBadge}>
-    共 {packages.length + activeServices.length} 个项目
+    共 {pricedPackages.length + activeServices.length} 个项目
     {" / "}
-    {packages.length + activeServices.length} Items
+    {pricedPackages.length + activeServices.length} Items
   </div>
 </div>
+
+<section style={vehicleSelectorPanel}>
+  <div style={vehicleSelectorHeader}>
+    <div>
+      <p style={vehicleSelectorEyebrow}>
+        VEHICLE-SIZE PRICING
+      </p>
+
+      <h2 style={vehicleSelectorTitle}>
+        先选择您的车型大小 / Choose Vehicle Size
+      </h2>
+
+      <p style={vehicleSelectorDescription}>
+        洗车、抛光、镀晶和套餐价格会按照车型自动更新
+        <br />
+        Service and package prices update automatically
+        for the selected vehicle size
+      </p>
+    </div>
+
+    {selectedVehicleOption && (
+      <div style={selectedVehicleBadge}>
+        <span style={selectedVehicleBadgeIcon}>
+          {selectedVehicleOption.icon}
+        </span>
+
+        <span>
+          当前车型 / Selected
+          <strong style={selectedVehicleBadgeName}>
+            {selectedVehicleOption.name_zh}
+            {" · "}
+            {selectedVehicleOption.name_en}
+          </strong>
+        </span>
+      </div>
+    )}
+  </div>
+
+  <div
+    style={vehicleSizeGrid}
+    className="vehicle-size-grid"
+  >
+    {vehicleSizes.map((option) => {
+      const isSelected =
+        option.code === selectedVehicleSize;
+
+      return (
+        <button
+          key={option.code}
+          type="button"
+          onClick={() =>
+            changeVehicleSize(option.code)
+          }
+          aria-pressed={isSelected}
+          style={{
+            ...vehicleSizeButton,
+            borderColor: isSelected
+              ? "#2563eb"
+              : "#dbe4f0",
+            background: isSelected
+              ? "linear-gradient(135deg,#eff6ff,#dbeafe)"
+              : "#ffffff",
+            boxShadow: isSelected
+              ? "0 14px 30px rgba(37,99,235,.16)"
+              : "0 8px 20px rgba(15,23,42,.06)",
+            transform: isSelected
+              ? "translateY(-2px)"
+              : "none",
+          }}
+        >
+          <span style={vehicleSizeIcon}>
+            {option.icon}
+          </span>
+
+          <span style={vehicleSizeText}>
+            <strong style={vehicleSizeName}>
+              {option.name_zh}
+            </strong>
+
+            <span style={vehicleSizeEnglish}>
+              {option.name_en}
+            </span>
+
+            {(option.description_zh ||
+              option.description_en) && (
+              <small
+                style={vehicleSizeDescription}
+              >
+                {option.description_zh}
+                {option.description_zh &&
+                option.description_en
+                  ? " / "
+                  : ""}
+                {option.description_en}
+              </small>
+            )}
+          </span>
+
+          <span
+            style={{
+              ...vehicleSizeCheck,
+              background: isSelected
+                ? "#2563eb"
+                : "#e2e8f0",
+              color: isSelected
+                ? "#ffffff"
+                : "#94a3b8",
+            }}
+          >
+            {isSelected ? "✓" : "○"}
+          </span>
+        </button>
+      );
+    })}
+  </div>
+
+  <div style={vehiclePriceNotice}>
+    <span>💡</span>
+    <span>
+      下方显示的是
+      <strong style={vehiclePriceNoticeStrong}>
+        {selectedVehicleOption?.name_zh ??
+          "所选车型"}
+      </strong>
+      的专属价格；切换车型后所有项目会立即更新。
+    </span>
+  </div>
+</section>
 
 <div style={searchPanel}>
           <form
@@ -684,7 +963,10 @@ function scrollToTop() {
                         sectionDescription
                       }
                     >
-                      浏览项目价格、施工效果和预约信息
+                      当前显示{" "}
+                      {selectedVehicleOption?.name_zh ??
+                        "所选车型"}
+                      的价格、施工效果和预约信息
                     </p>
                   </div>
 
@@ -819,22 +1101,30 @@ function scrollToTop() {
   />
 )}
       {selectedService && (
-        <BookingModal
-          service={selectedService}
-          onClose={() =>
-            setSelectedService(null)
-          }
-        />
-      )}
+  <BookingModal
+    service={selectedService}
+    vehicleSizeCode={selectedVehicleSize}
+    vehicleSizeName={selectedVehicleOption?.name_zh}
+    vehicleSizeNameEn={selectedVehicleOption?.name_en}
+    vehicleSizeIcon={selectedVehicleOption?.icon}
+    quotedPrice={Number(selectedService.price ?? 0)}
+    onClose={() => setSelectedService(null)}
+  />
+)}
 
-      {selectedPackage && (
-        <BookingModal
-          packageItem={selectedPackage}
-          onClose={() =>
-            setSelectedPackage(null)
-          }
-        />
-      )}
+{selectedPackage && (
+  <BookingModal
+    packageItem={selectedPackage}
+    vehicleSizeCode={selectedVehicleSize}
+    vehicleSizeName={selectedVehicleOption?.name_zh}
+    vehicleSizeNameEn={selectedVehicleOption?.name_en}
+    vehicleSizeIcon={selectedVehicleOption?.icon}
+    quotedPrice={Number(
+      selectedPackage.package_price ?? 0
+    )}
+    onClose={() => setSelectedPackage(null)}
+  />
+)}
       <div style={floatingActions}>
         {phoneLink && (
           <a
@@ -1113,6 +1403,160 @@ const totalBadge = {
   fontSize: 13,
   fontWeight: 900,
   whiteSpace: "nowrap" as const,
+};
+
+const vehicleSelectorPanel = {
+  marginTop: 25,
+  padding: 24,
+  border: "1px solid #bfdbfe",
+  borderRadius: 24,
+  background:
+    "linear-gradient(145deg,#ffffff 0%,#f8fbff 55%,#eff6ff 100%)",
+  boxShadow:
+    "0 18px 45px rgba(37,99,235,.10)",
+};
+
+const vehicleSelectorHeader = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  flexWrap: "wrap" as const,
+  gap: 18,
+};
+
+const vehicleSelectorEyebrow = {
+  margin: 0,
+  color: "#2563eb",
+  fontSize: 10,
+  fontWeight: 950,
+  letterSpacing: "1.5px",
+};
+
+const vehicleSelectorTitle = {
+  margin: "7px 0 0",
+  color: "#0f172a",
+  fontSize: 25,
+  lineHeight: 1.25,
+};
+
+const vehicleSelectorDescription = {
+  margin: "8px 0 0",
+  color: "#64748b",
+  fontSize: 13,
+  lineHeight: 1.65,
+};
+
+const selectedVehicleBadge = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 11,
+  minWidth: 220,
+  padding: "12px 15px",
+  border: "1px solid #bfdbfe",
+  borderRadius: 16,
+  background: "#ffffff",
+  color: "#64748b",
+  fontSize: 11,
+  fontWeight: 750,
+  boxShadow:
+    "0 10px 24px rgba(37,99,235,.08)",
+};
+
+const selectedVehicleBadgeIcon = {
+  fontSize: 31,
+};
+
+const selectedVehicleBadgeName = {
+  display: "block",
+  marginTop: 3,
+  color: "#1d4ed8",
+  fontSize: 13,
+};
+
+const vehicleSizeGrid = {
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(4, minmax(0, 1fr))",
+  gap: 12,
+  marginTop: 22,
+};
+
+const vehicleSizeButton = {
+  width: "100%",
+  minHeight: 116,
+  position: "relative" as const,
+  display: "flex",
+  alignItems: "center",
+  gap: 12,
+  padding: "16px 42px 16px 15px",
+  border: "2px solid",
+  borderRadius: 18,
+  cursor: "pointer",
+  textAlign: "left" as const,
+  transition:
+    "transform .18s ease, box-shadow .18s ease, border-color .18s ease",
+};
+
+const vehicleSizeIcon = {
+  flexShrink: 0,
+  fontSize: 34,
+};
+
+const vehicleSizeText = {
+  minWidth: 0,
+  display: "flex",
+  flexDirection: "column" as const,
+  gap: 2,
+};
+
+const vehicleSizeName = {
+  color: "#0f172a",
+  fontSize: 15,
+};
+
+const vehicleSizeEnglish = {
+  color: "#2563eb",
+  fontSize: 11,
+  fontWeight: 850,
+};
+
+const vehicleSizeDescription = {
+  marginTop: 4,
+  color: "#94a3b8",
+  fontSize: 9,
+  lineHeight: 1.4,
+};
+
+const vehicleSizeCheck = {
+  position: "absolute" as const,
+  top: 12,
+  right: 12,
+  width: 24,
+  height: 24,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: "50%",
+  fontSize: 13,
+  fontWeight: 950,
+};
+
+const vehiclePriceNotice = {
+  marginTop: 16,
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  padding: "11px 13px",
+  borderRadius: 13,
+  background: "#eff6ff",
+  color: "#475569",
+  fontSize: 12,
+  lineHeight: 1.5,
+};
+
+const vehiclePriceNoticeStrong = {
+  margin: "0 4px",
+  color: "#1d4ed8",
 };
 
 const searchPanel = {
