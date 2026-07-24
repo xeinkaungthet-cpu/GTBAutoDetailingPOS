@@ -10,6 +10,7 @@ import {
 import ServiceImageUploader from "../components/services/ServiceImageUploader";
 import ServiceVehiclePricingEditor from "../components/services/ServiceVehiclePricingEditor";
 import { supabase } from "../lib/supabase";
+import useCurrency from "../hooks/useCurrency";
 
 type UploadImageType = "main" | "before" | "after";
 
@@ -95,6 +96,16 @@ const emptyForm: ServiceForm = {
 };
 
 function Services() {
+  const {
+    formatMoney,
+    formatAccountingMoney,
+    currentOption,
+    accountingOption,
+    displayCurrency,
+    convertToDisplay,
+    convertToAccounting,
+  } = useCurrency();
+
   const [services, setServices] = useState<ServiceRecord[]>([]);
   const [search, setSearch] = useState("");
   const [profitFilter, setProfitFilter] =
@@ -103,6 +114,8 @@ function Services() {
   const [form, setForm] = useState<ServiceForm>(emptyForm);
   const [editingId, setEditingId] =
     useState<number | null>(null);
+  const [formCurrency, setFormCurrency] =
+    useState(displayCurrency);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -114,11 +127,19 @@ function Services() {
     } | null>(null);
 
   const formFinancials = useMemo(() => {
-    const sellingPrice = toNumber(form.price);
-    const costPrice = toNumber(form.cost_price);
+    const sellingPrice = convertToAccounting(
+      toNumber(form.price)
+    );
+    const costPrice = convertToAccounting(
+      toNumber(form.cost_price)
+    );
 
     return calculateFinancials(sellingPrice, costPrice);
-  }, [form.price, form.cost_price]);
+  }, [
+    form.price,
+    form.cost_price,
+    convertToAccounting,
+  ]);
 
   const summary = useMemo(() => {
     const activeCount = services.filter(
@@ -209,6 +230,52 @@ function Services() {
     void loadServices();
   }, []);
 
+  useEffect(() => {
+    if (formCurrency === displayCurrency) {
+      return;
+    }
+
+    setForm((current) => {
+      if (editingId !== null) {
+        const editingService = services.find(
+          (service) => service.id === editingId
+        );
+
+        if (editingService) {
+          return {
+            ...current,
+            price: formatCurrencyInput(
+              convertToDisplay(
+                toNumber(editingService.price)
+              ),
+              displayCurrency
+            ),
+            cost_price: formatCurrencyInput(
+              convertToDisplay(
+                toNumber(editingService.cost_price)
+              ),
+              displayCurrency
+            ),
+          };
+        }
+      }
+
+      return {
+        ...current,
+        price: "",
+        cost_price: "0",
+      };
+    });
+
+    setFormCurrency(displayCurrency);
+  }, [
+    displayCurrency,
+    editingId,
+    services,
+    formCurrency,
+    convertToDisplay,
+  ]);
+
   async function loadServices() {
     setLoading(true);
 
@@ -244,6 +311,7 @@ function Services() {
 
   function startEditing(service: ServiceRecord) {
     setEditingId(service.id);
+    setFormCurrency(displayCurrency);
 
     setForm({
       service_name: service.service_name ?? "",
@@ -254,8 +322,16 @@ function Services() {
 
       category: service.category ?? "",
 
-      price: String(service.price ?? 0),
-      cost_price: String(service.cost_price ?? 0),
+      price: formatCurrencyInput(
+        convertToDisplay(toNumber(service.price)),
+        displayCurrency
+      ),
+      cost_price: formatCurrencyInput(
+        convertToDisplay(
+          toNumber(service.cost_price)
+        ),
+        displayCurrency
+      ),
       duration_minutes: String(
         service.duration_minutes ?? 0
       ),
@@ -278,6 +354,7 @@ function Services() {
   function cancelEditing() {
     setEditingId(null);
     setForm(emptyForm);
+    setFormCurrency(displayCurrency);
   }
 
   async function saveService(
@@ -288,8 +365,14 @@ function Services() {
     const serviceName = form.service_name.trim();
     const category = form.category.trim();
 
-    const price = Number(form.price);
-    const costPrice = Number(form.cost_price);
+    const inputPrice = Number(form.price);
+    const inputCostPrice = Number(form.cost_price);
+    const price = roundAccountingAmount(
+      convertToAccounting(inputPrice)
+    );
+    const costPrice = roundAccountingAmount(
+      convertToAccounting(inputCostPrice)
+    );
     const durationMinutes = Number(
       form.duration_minutes
     );
@@ -307,14 +390,17 @@ function Services() {
       return;
     }
 
-    if (!Number.isFinite(price) || price < 0) {
+    if (
+      !Number.isFinite(inputPrice) ||
+      inputPrice < 0
+    ) {
       alert("请输入正确的销售价格");
       return;
     }
 
     if (
-      !Number.isFinite(costPrice) ||
-      costPrice < 0
+      !Number.isFinite(inputCostPrice) ||
+      inputCostPrice < 0
     ) {
       alert("请输入正确的内部成本");
       return;
@@ -757,6 +843,12 @@ function Services() {
                 ? "填写服务资料、价格和内部成本"
                 : `正在编辑服务 ID：${editingId}`}
             </p>
+
+            <p style={styles.currencyHint}>
+              输入货币：{currentOption.flag} {currentOption.code}
+              {" · "}
+              账本货币：{accountingOption.flag} {accountingOption.code}
+            </p>
           </div>
 
           {editingId !== null && (
@@ -843,32 +935,54 @@ function Services() {
 
           <div className="service-form-grid">
             <FormField
-              label="销售价格 / Selling Price"
+              label={`销售价格 / Selling Price (${displayCurrency})`}
               type="number"
               min="0"
-              step="0.01"
+              step={
+                displayCurrency === "MMK"
+                  ? "1"
+                  : "0.01"
+              }
               value={form.price}
-              placeholder="0.00"
+              placeholder={
+                displayCurrency === "MMK"
+                  ? "0"
+                  : "0.00"
+              }
               onChange={(value) =>
                 updateForm("price", value)
               }
-              prefix="$"
+              prefix={currentOption.symbol}
+              hint={`保存到账本：${formatAccountingMoney(
+                formFinancials.sellingPrice
+              )}`}
             />
 
             <FormField
-              label="内部成本 / Internal Cost"
+              label={`内部成本 / Internal Cost (${displayCurrency})`}
               type="number"
               min="0"
-              step="0.01"
+              step={
+                displayCurrency === "MMK"
+                  ? "1"
+                  : "0.01"
+              }
               value={form.cost_price}
-              placeholder="0.00"
+              placeholder={
+                displayCurrency === "MMK"
+                  ? "0"
+                  : "0.00"
+              }
               onChange={(value) =>
                 updateForm(
                   "cost_price",
                   value
                 )
               }
-              prefix="$"
+              prefix={currentOption.symbol}
+              hint={`保存到账本：${formatAccountingMoney(
+                formFinancials.costPrice
+              )}`}
             />
           </div>
 
@@ -1489,6 +1603,7 @@ type FormFieldProps = {
   max?: string;
   step?: string;
   prefix?: string;
+  hint?: string;
   onChange: (value: string) => void;
 };
 
@@ -1501,6 +1616,7 @@ function FormField({
   max,
   step,
   prefix,
+  hint,
   onChange,
 }: FormFieldProps) {
   return (
@@ -1528,10 +1644,18 @@ function FormField({
           }
           style={{
             ...styles.input,
-            paddingLeft: prefix ? 38 : 14,
+            paddingLeft: prefix
+              ? Math.max(52, prefix.length * 10 + 24)
+              : 14,
           }}
         />
       </div>
+
+      {hint && (
+        <small style={styles.fieldHint}>
+          {hint}
+        </small>
+      )}
     </label>
   );
 }
@@ -1783,12 +1907,25 @@ function toNumber(
     : 0;
 }
 
-function formatMoney(value: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-  }).format(value || 0);
+function formatCurrencyInput(
+  value: number,
+  currency: string
+) {
+  if (!Number.isFinite(value)) {
+    return "";
+  }
+
+  const digits = currency === "MMK" ? 0 : 2;
+
+  return value.toFixed(digits);
+}
+
+function roundAccountingAmount(value: number) {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  return Math.round((value + Number.EPSILON) * 1_000_000) / 1_000_000;
 }
 
 function formatPercent(value: number) {
@@ -1952,6 +2089,13 @@ const styles: Record<string, CSSProperties> = {
     fontSize: 13,
   },
 
+  currencyHint: {
+    margin: "7px 0 0",
+    color: "#2563eb",
+    fontSize: 12,
+    fontWeight: 800,
+  },
+
   cancelButton: {
     padding: "10px 14px",
     border: "1px solid #cbd5e1",
@@ -1976,6 +2120,12 @@ const styles: Record<string, CSSProperties> = {
     color: "#334155",
     fontSize: 13,
     fontWeight: 800,
+  },
+
+  fieldHint: {
+    color: "#64748b",
+    fontSize: 11,
+    lineHeight: 1.5,
   },
 
   inputWrapper: {

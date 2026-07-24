@@ -139,6 +139,9 @@ function Expenses() {
     formatAccountingMoney,
     currentOption,
     accountingOption,
+    displayCurrency,
+    convertToDisplay,
+    convertToAccounting,
   } = useCurrency();
 
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
@@ -150,6 +153,8 @@ function Expenses() {
     useState<FilterForm>(emptyFilters);
 
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [formCurrency, setFormCurrency] =
+    useState(displayCurrency);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -163,6 +168,52 @@ function Expenses() {
   useEffect(() => {
     void loadPageData(appliedFilters);
   }, [appliedFilters]);
+
+  useEffect(() => {
+    if (formCurrency === displayCurrency) {
+      return;
+    }
+
+    setForm((current) => {
+      if (editingId !== null) {
+        const editingExpense = expenses.find(
+          (expense) => expense.id === editingId
+        );
+
+        if (editingExpense) {
+          return {
+            ...current,
+            subtotal: formatCurrencyInput(
+              convertToDisplay(
+                toNumber(editingExpense.subtotal)
+              ),
+              displayCurrency
+            ),
+            tax_amount: formatCurrencyInput(
+              convertToDisplay(
+                toNumber(editingExpense.tax_amount)
+              ),
+              displayCurrency
+            ),
+          };
+        }
+      }
+
+      return {
+        ...current,
+        subtotal: "",
+        tax_amount: "0",
+      };
+    });
+
+    setFormCurrency(displayCurrency);
+  }, [
+    displayCurrency,
+    editingId,
+    expenses,
+    formCurrency,
+    convertToDisplay,
+  ]);
 
   async function loadPageData(activeFilters: FilterForm) {
     setLoading(true);
@@ -299,10 +350,12 @@ function Expenses() {
     });
 
     setEditingId(null);
+    setFormCurrency(displayCurrency);
   }
 
   function startEditing(expense: Expense) {
     setEditingId(expense.id);
+    setFormCurrency(displayCurrency);
 
     setForm({
       expense_date: expense.expense_date || todayInputValue(),
@@ -314,8 +367,18 @@ function Expenses() {
       description: expense.description || "",
       payee_name: expense.payee_name || "",
       reference_no: expense.reference_no || "",
-      subtotal: String(expense.subtotal ?? ""),
-      tax_amount: String(expense.tax_amount ?? 0),
+      subtotal: formatCurrencyInput(
+        convertToDisplay(
+          toNumber(expense.subtotal)
+        ),
+        displayCurrency
+      ),
+      tax_amount: formatCurrencyInput(
+        convertToDisplay(
+          toNumber(expense.tax_amount)
+        ),
+        displayCurrency
+      ),
       payment_method: expense.payment_method,
       payment_status: expense.payment_status,
       due_date: expense.due_date || "",
@@ -335,20 +398,33 @@ function Expenses() {
   async function saveExpense(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const subtotal = Number(form.subtotal);
-    const taxAmount = Number(form.tax_amount || 0);
+    const inputSubtotal = Number(form.subtotal);
+    const inputTaxAmount = Number(form.tax_amount || 0);
+
+    const subtotal = roundAccountingAmount(
+      convertToAccounting(inputSubtotal)
+    );
+    const taxAmount = roundAccountingAmount(
+      convertToAccounting(inputTaxAmount)
+    );
 
     if (!form.title.trim()) {
       alert("请输入费用名称");
       return;
     }
 
-    if (!Number.isFinite(subtotal) || subtotal < 0) {
+    if (
+      !Number.isFinite(inputSubtotal) ||
+      inputSubtotal < 0
+    ) {
       alert("请输入正确的费用金额");
       return;
     }
 
-    if (!Number.isFinite(taxAmount) || taxAmount < 0) {
+    if (
+      !Number.isFinite(inputTaxAmount) ||
+      inputTaxAmount < 0
+    ) {
       alert("请输入正确的税额");
       return;
     }
@@ -466,7 +542,12 @@ function Expenses() {
     }
   }
 
-  const formTotal = toNumber(form.subtotal) + toNumber(form.tax_amount);
+  const formTotalDisplay =
+    toNumber(form.subtotal) +
+    toNumber(form.tax_amount);
+
+  const formTotalAccounting =
+    convertToAccounting(formTotalDisplay);
 
   const summary = useMemo(() => {
     const paidRows = expenses.filter(
@@ -899,7 +980,10 @@ function Expenses() {
             <p style={styles.cardDescription}>
               总金额会自动按“未税金额 + 税额”计算；输入金额使用
               {" "}
-              <strong>{accountingOption.code}</strong> 基础货币
+              <strong>{currentOption.code}</strong>
+              ，保存时自动换算为
+              {" "}
+              <strong>{accountingOption.code}</strong> 账本货币
             </p>
           </div>
 
@@ -958,20 +1042,48 @@ function Expenses() {
           />
 
           <InputField
-            label="未税金额 / Subtotal"
+            label={`未税金额 / Subtotal (${displayCurrency})`}
             type="number"
             value={form.subtotal}
-            placeholder="0.00"
-            prefix={accountingOption.symbol}
+            placeholder={
+              displayCurrency === "MMK"
+                ? "0"
+                : "0.00"
+            }
+            step={
+              displayCurrency === "MMK"
+                ? "1"
+                : "0.01"
+            }
+            prefix={currentOption.symbol}
+            hint={`保存到账本：${formatAccountingMoney(
+              convertToAccounting(
+                toNumber(form.subtotal)
+              )
+            )}`}
             onChange={(value) => updateForm("subtotal", value)}
           />
 
           <InputField
-            label="税额 / Tax Amount"
+            label={`税额 / Tax Amount (${displayCurrency})`}
             type="number"
             value={form.tax_amount}
-            placeholder="0.00"
-            prefix={accountingOption.symbol}
+            placeholder={
+              displayCurrency === "MMK"
+                ? "0"
+                : "0.00"
+            }
+            step={
+              displayCurrency === "MMK"
+                ? "1"
+                : "0.01"
+            }
+            prefix={currentOption.symbol}
+            hint={`保存到账本：${formatAccountingMoney(
+              convertToAccounting(
+                toNumber(form.tax_amount)
+              )
+            )}`}
             onChange={(value) => updateForm("tax_amount", value)}
           />
 
@@ -1120,8 +1232,10 @@ function Expenses() {
             <span style={styles.totalLabel}>费用总额 / Total Amount</span>
             <strong style={styles.totalValue}>
               {accountingOption.code === currentOption.code
-                ? formatMoney(formTotal)
-                : `${formatAccountingMoney(formTotal)} ≈ ${formatMoney(formTotal)}`}
+                ? formatMoney(formTotalAccounting)
+                : `${formatMoney(formTotalAccounting)} · 保存到账本 ${formatAccountingMoney(
+                    formTotalAccounting
+                  )}`}
             </strong>
           </div>
 
@@ -1686,6 +1800,8 @@ function InputField({
   type = "text",
   placeholder = "",
   prefix,
+  step,
+  hint,
   disabled = false,
 }: {
   label: string;
@@ -1694,6 +1810,8 @@ function InputField({
   type?: "text" | "number" | "date";
   placeholder?: string;
   prefix?: string;
+  step?: string;
+  hint?: string;
   disabled?: boolean;
 }) {
   return (
@@ -1709,15 +1827,27 @@ function InputField({
           placeholder={placeholder}
           disabled={disabled}
           min={type === "number" ? "0" : undefined}
-          step={type === "number" ? "0.01" : undefined}
+          step={
+            type === "number"
+              ? step ?? "0.01"
+              : undefined
+          }
           onChange={(event) => onChange(event.target.value)}
           style={{
             ...styles.input,
-            paddingLeft: prefix ? 37 : 13,
+            paddingLeft: prefix
+              ? Math.max(52, prefix.length * 10 + 24)
+              : 13,
             opacity: disabled ? 0.55 : 1,
           }}
         />
       </div>
+
+      {hint && (
+        <small style={styles.fieldHint}>
+          {hint}
+        </small>
+      )}
     </label>
   );
 }
@@ -1819,6 +1949,27 @@ function toInputDate(date: Date) {
 function toNumber(value: number | string | null | undefined) {
   const numberValue = Number(value);
   return Number.isFinite(numberValue) ? numberValue : 0;
+}
+
+function formatCurrencyInput(
+  value: number,
+  currency: string
+) {
+  if (!Number.isFinite(value)) {
+    return "";
+  }
+
+  const digits = currency === "MMK" ? 0 : 2;
+
+  return value.toFixed(digits);
+}
+
+function roundAccountingAmount(value: number) {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  return Math.round((value + Number.EPSILON) * 1_000_000) / 1_000_000;
 }
 
 function getErrorMessage(error: unknown) {
@@ -2039,6 +2190,11 @@ const styles: Record<string, CSSProperties> = {
     color: "#334155",
     fontSize: 12,
     fontWeight: 800,
+  },
+  fieldHint: {
+    color: "#64748b",
+    fontSize: 11,
+    lineHeight: 1.5,
   },
   inputWrapper: {
     position: "relative",
