@@ -100,6 +100,8 @@ function Services() {
     formatAccountingMoney,
     displayCurrency,
     accountingCurrency,
+    convertToDisplay,
+    convertToAccounting,
   } = useCurrency();
 
   const [services, setServices] = useState<ServiceRecord[]>([]);
@@ -110,6 +112,8 @@ function Services() {
   const [form, setForm] = useState<ServiceForm>(emptyForm);
   const [editingId, setEditingId] =
     useState<number | null>(null);
+  const [formCurrency, setFormCurrency] =
+    useState(displayCurrency);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -121,11 +125,19 @@ function Services() {
     } | null>(null);
 
   const formFinancials = useMemo(() => {
-    const sellingPrice = toNumber(form.price);
-    const costPrice = toNumber(form.cost_price);
+    const sellingPrice = convertToAccounting(
+      toNumber(form.price)
+    );
+    const costPrice = convertToAccounting(
+      toNumber(form.cost_price)
+    );
 
     return calculateFinancials(sellingPrice, costPrice);
-  }, [form.price, form.cost_price]);
+  }, [
+    form.price,
+    form.cost_price,
+    convertToAccounting,
+  ]);
 
   const summary = useMemo(() => {
     const activeCount = services.filter(
@@ -216,6 +228,52 @@ function Services() {
     void loadServices();
   }, []);
 
+  useEffect(() => {
+    if (formCurrency === displayCurrency) {
+      return;
+    }
+
+    setForm((current) => {
+      if (editingId !== null) {
+        const editingService = services.find(
+          (service) => service.id === editingId
+        );
+
+        if (editingService) {
+          return {
+            ...current,
+            price: formatCurrencyInput(
+              convertToDisplay(
+                toNumber(editingService.price)
+              ),
+              displayCurrency
+            ),
+            cost_price: formatCurrencyInput(
+              convertToDisplay(
+                toNumber(editingService.cost_price)
+              ),
+              displayCurrency
+            ),
+          };
+        }
+      }
+
+      return {
+        ...current,
+        price: "",
+        cost_price: "0",
+      };
+    });
+
+    setFormCurrency(displayCurrency);
+  }, [
+    displayCurrency,
+    editingId,
+    services,
+    formCurrency,
+    convertToDisplay,
+  ]);
+
   async function loadServices() {
     setLoading(true);
 
@@ -251,6 +309,7 @@ function Services() {
 
   function startEditing(service: ServiceRecord) {
     setEditingId(service.id);
+    setFormCurrency(displayCurrency);
 
     setForm({
       service_name: service.service_name ?? "",
@@ -261,8 +320,16 @@ function Services() {
 
       category: service.category ?? "",
 
-      price: String(service.price ?? 0),
-      cost_price: String(service.cost_price ?? 0),
+      price: formatCurrencyInput(
+        convertToDisplay(toNumber(service.price)),
+        displayCurrency
+      ),
+      cost_price: formatCurrencyInput(
+        convertToDisplay(
+          toNumber(service.cost_price)
+        ),
+        displayCurrency
+      ),
       duration_minutes: String(
         service.duration_minutes ?? 0
       ),
@@ -285,6 +352,7 @@ function Services() {
   function cancelEditing() {
     setEditingId(null);
     setForm(emptyForm);
+    setFormCurrency(displayCurrency);
   }
 
   async function saveService(
@@ -295,8 +363,16 @@ function Services() {
     const serviceName = form.service_name.trim();
     const category = form.category.trim();
 
-    const price = Number(form.price);
-    const costPrice = Number(form.cost_price);
+    const inputPrice = Number(form.price);
+    const inputCostPrice = Number(form.cost_price);
+
+    const price = roundAccountingAmount(
+      convertToAccounting(inputPrice)
+    );
+    const costPrice = roundAccountingAmount(
+      convertToAccounting(inputCostPrice)
+    );
+
     const durationMinutes = Number(
       form.duration_minutes
     );
@@ -314,16 +390,33 @@ function Services() {
       return;
     }
 
-    if (!Number.isFinite(price) || price < 0) {
-      alert("请输入正确的销售价格");
+    if (
+      !Number.isFinite(inputPrice) ||
+      inputPrice < 0
+    ) {
+      alert(
+        `请输入正确的销售价格（${displayCurrency}）`
+      );
       return;
     }
 
     if (
-      !Number.isFinite(costPrice) ||
-      costPrice < 0
+      !Number.isFinite(inputCostPrice) ||
+      inputCostPrice < 0
     ) {
-      alert("请输入正确的内部成本");
+      alert(
+        `请输入正确的内部成本（${displayCurrency}）`
+      );
+      return;
+    }
+
+    if (
+      !Number.isFinite(price) ||
+      !Number.isFinite(costPrice)
+    ) {
+      alert(
+        `无法把 ${displayCurrency} 换算成 ${accountingCurrency}，请检查汇率设置。`
+      );
       return;
     }
 
@@ -354,7 +447,7 @@ function Services() {
 
     if (costPrice > price) {
       const confirmed = window.confirm(
-        `当前内部成本高于销售价格，这个服务会产生负利润。\n输入与保存货币：${accountingCurrency}\n仍然继续保存吗？`
+        `当前内部成本高于销售价格，这个服务会产生负利润。\n输入货币：${displayCurrency}\n账本保存货币：${accountingCurrency}\n仍然继续保存吗？`
       );
 
       if (!confirmed) {
@@ -711,7 +804,19 @@ function Services() {
 
         <div style={styles.currencyItem}>
           <span style={styles.currencyLabel}>
-            价格输入与账本保存 / Accounting
+            当前价格输入 / Price Input
+          </span>
+
+          <strong style={styles.currencyValue}>
+            {displayCurrency}
+          </strong>
+        </div>
+
+        <div style={styles.currencyDivider} />
+
+        <div style={styles.currencyItem}>
+          <span style={styles.currencyLabel}>
+            数据库记账货币 / Accounting
           </span>
 
           <strong style={styles.currencyValue}>
@@ -720,9 +825,9 @@ function Services() {
         </div>
 
         <p style={styles.currencyNote}>
-          销售价格和内部成本输入框始终使用 {accountingCurrency}。
-          页面卡片、利润预览和统计金额会按当前汇率转换为{" "}
-          {displayCurrency} 显示。
+          现在可以直接使用 {displayCurrency} 输入销售价格和内部成本。
+          保存时系统会按照当前汇率自动换算成 {accountingCurrency}
+          写入账本；切换左侧显示货币后，编辑框也会同步切换。
         </p>
       </section>
 
@@ -880,50 +985,54 @@ function Services() {
 
           <div className="service-form-grid">
             <FormField
-              label={`销售价格 / Selling Price (${accountingCurrency})`}
+              label={`销售价格 / Selling Price (${displayCurrency})`}
               type="number"
               min="0"
-              step="0.01"
+              step={
+                displayCurrency === "MMK"
+                  ? "1"
+                  : "0.01"
+              }
               value={form.price}
-              placeholder="0.00"
+              placeholder={
+                displayCurrency === "MMK"
+                  ? "0"
+                  : "0.00"
+              }
               onChange={(value) =>
                 updateForm("price", value)
               }
-              prefix={accountingCurrency}
-              hint={
-                displayCurrency === accountingCurrency
-                  ? `账本金额：${formatAccountingMoney(
-                      formFinancials.sellingPrice
-                    )}`
-                  : `当前显示：${formatMoney(
-                      formFinancials.sellingPrice
-                    )}`
-              }
+              prefix={displayCurrency}
+              hint={`保存到账本：${formatAccountingMoney(
+                formFinancials.sellingPrice
+              )}`}
             />
 
             <FormField
-              label={`内部成本 / Internal Cost (${accountingCurrency})`}
+              label={`内部成本 / Internal Cost (${displayCurrency})`}
               type="number"
               min="0"
-              step="0.01"
+              step={
+                displayCurrency === "MMK"
+                  ? "1"
+                  : "0.01"
+              }
               value={form.cost_price}
-              placeholder="0.00"
+              placeholder={
+                displayCurrency === "MMK"
+                  ? "0"
+                  : "0.00"
+              }
               onChange={(value) =>
                 updateForm(
                   "cost_price",
                   value
                 )
               }
-              prefix={accountingCurrency}
-              hint={
-                displayCurrency === accountingCurrency
-                  ? `账本金额：${formatAccountingMoney(
-                      formFinancials.costPrice
-                    )}`
-                  : `当前显示：${formatMoney(
-                      formFinancials.costPrice
-                    )}`
-              }
+              prefix={displayCurrency}
+              hint={`保存到账本：${formatAccountingMoney(
+                formFinancials.costPrice
+              )}`}
             />
           </div>
 
@@ -1086,7 +1195,8 @@ function Services() {
 
         <div style={styles.formFooter}>
           <span style={styles.formHint}>
-            利润 = 销售价格 − 内部成本 · 输入与保存货币：
+            利润 = 销售价格 − 内部成本 · 当前输入：
+            {displayCurrency} · 自动保存为：
             {accountingCurrency}
           </span>
 
@@ -1831,6 +1941,32 @@ function getServiceImageUrl(
   }
 
   return service.after_image;
+}
+
+function formatCurrencyInput(
+  value: number,
+  currency: string
+) {
+  if (!Number.isFinite(value)) {
+    return "";
+  }
+
+  if (currency === "MMK") {
+    return String(Math.round(value));
+  }
+
+  return value
+    .toFixed(2)
+    .replace(/\.00$/, "")
+    .replace(/(\.\d)0$/, "$1");
+}
+
+function roundAccountingAmount(value: number) {
+  if (!Number.isFinite(value)) {
+    return Number.NaN;
+  }
+
+  return Number(value.toFixed(6));
 }
 
 function toNumber(

@@ -64,6 +64,8 @@ function Packages() {
     formatAccountingMoney,
     displayCurrency,
     accountingCurrency,
+    convertToDisplay,
+    convertToAccounting,
   } = useCurrency();
 
   const [packages, setPackages] = useState<Package[]>([]);
@@ -87,6 +89,9 @@ function Packages() {
   const [editingId, setEditingId] =
     useState<number | null>(null);
 
+  const [formCurrency, setFormCurrency] =
+    useState(displayCurrency);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -96,6 +101,52 @@ function Packages() {
   useEffect(() => {
     void loadData();
   }, []);
+
+  useEffect(() => {
+    if (formCurrency === displayCurrency) {
+      return;
+    }
+
+    setForm((current) => {
+      if (editingId !== null) {
+        const editingPackage = packages.find(
+          (packageItem) => packageItem.id === editingId
+        );
+
+        if (editingPackage) {
+          return {
+            ...current,
+            package_price: formatCurrencyInput(
+              convertToDisplay(
+                toNumber(editingPackage.package_price)
+              ),
+              displayCurrency
+            ),
+            cost_price: formatCurrencyInput(
+              convertToDisplay(
+                toNumber(editingPackage.cost_price)
+              ),
+              displayCurrency
+            ),
+          };
+        }
+      }
+
+      return {
+        ...current,
+        package_price: "",
+        cost_price: "0",
+      };
+    });
+
+    setFormCurrency(displayCurrency);
+  }, [
+    displayCurrency,
+    editingId,
+    packages,
+    formCurrency,
+    convertToDisplay,
+  ]);
 
   async function loadData() {
     setLoading(true);
@@ -160,11 +211,23 @@ function Packages() {
   }, [selectedServices]);
 
   const formFinancials = useMemo(() => {
-    return calculateFinancials(
-      toNumber(form.package_price),
+    const sellingPrice = convertToAccounting(
+      toNumber(form.package_price)
+    );
+
+    const costPrice = convertToAccounting(
       toNumber(form.cost_price)
     );
-  }, [form.package_price, form.cost_price]);
+
+    return calculateFinancials(
+      sellingPrice,
+      costPrice
+    );
+  }, [
+    form.package_price,
+    form.cost_price,
+    convertToAccounting,
+  ]);
 
   const savings = Math.max(
     originalPrice - formFinancials.sellingPrice,
@@ -300,10 +363,12 @@ function Packages() {
     setForm(emptyForm);
     setSelectedServiceIds([]);
     setEditingId(null);
+    setFormCurrency(displayCurrency);
   }
 
   function startEditing(packageItem: Package) {
     setEditingId(packageItem.id);
+    setFormCurrency(displayCurrency);
 
     setForm({
       package_name:
@@ -314,11 +379,17 @@ function Packages() {
         packageItem.description || "",
       description_en:
         packageItem.description_en || "",
-      package_price: String(
-        packageItem.package_price ?? ""
+      package_price: formatCurrencyInput(
+        convertToDisplay(
+          toNumber(packageItem.package_price)
+        ),
+        displayCurrency
       ),
-      cost_price: String(
-        packageItem.cost_price ?? 0
+      cost_price: formatCurrencyInput(
+        convertToDisplay(
+          toNumber(packageItem.cost_price)
+        ),
+        displayCurrency
       ),
       is_active:
         packageItem.is_active !== false,
@@ -347,12 +418,20 @@ function Packages() {
     const packageName =
       form.package_name.trim();
 
-    const price = Number(
+    const inputPrice = Number(
       form.package_price
     );
 
-    const costPrice = Number(
+    const inputCostPrice = Number(
       form.cost_price
+    );
+
+    const price = roundAccountingAmount(
+      convertToAccounting(inputPrice)
+    );
+
+    const costPrice = roundAccountingAmount(
+      convertToAccounting(inputCostPrice)
     );
 
     if (!packageName) {
@@ -368,24 +447,38 @@ function Packages() {
     }
 
     if (
-      !Number.isFinite(price) ||
-      price <= 0
+      !Number.isFinite(inputPrice) ||
+      inputPrice <= 0
     ) {
-      alert("请输入正确的套餐价格");
+      alert(
+        `请输入正确的套餐价格（${displayCurrency}）`
+      );
       return;
     }
 
     if (
-      !Number.isFinite(costPrice) ||
-      costPrice < 0
+      !Number.isFinite(inputCostPrice) ||
+      inputCostPrice < 0
     ) {
-      alert("请输入正确的套餐内部成本");
+      alert(
+        `请输入正确的套餐内部成本（${displayCurrency}）`
+      );
+      return;
+    }
+
+    if (
+      !Number.isFinite(price) ||
+      !Number.isFinite(costPrice)
+    ) {
+      alert(
+        `无法把 ${displayCurrency} 换算成 ${accountingCurrency}，请检查汇率设置。`
+      );
       return;
     }
 
     if (costPrice > price) {
       const confirmed = window.confirm(
-        "当前套餐内部成本高于套餐售价，这个套餐会产生负利润。\n仍然继续保存吗？"
+        `当前套餐内部成本高于套餐售价，这个套餐会产生负利润。\n输入货币：${displayCurrency}\n账本保存货币：${accountingCurrency}\n仍然继续保存吗？`
       );
 
       if (!confirmed) {
@@ -649,7 +742,19 @@ function Packages() {
 
         <div style={styles.currencyItem}>
           <span style={styles.currencyLabel}>
-            价格输入与账本保存 / Accounting
+            当前价格输入 / Price Input
+          </span>
+
+          <strong style={styles.currencyValue}>
+            {displayCurrency}
+          </strong>
+        </div>
+
+        <div style={styles.currencyDivider} />
+
+        <div style={styles.currencyItem}>
+          <span style={styles.currencyLabel}>
+            数据库记账货币 / Accounting
           </span>
 
           <strong style={styles.currencyValue}>
@@ -658,9 +763,9 @@ function Packages() {
         </div>
 
         <p style={styles.currencyNote}>
-          套餐售价和内部成本输入框始终使用 {accountingCurrency}。
-          套餐卡片、服务价格、优惠和利润会按当前汇率转换为{" "}
-          {displayCurrency} 显示。
+          现在可以直接使用 {displayCurrency} 输入套餐售价和内部成本。
+          保存时系统会按照当前汇率自动换算成 {accountingCurrency}
+          写入账本；切换左侧 USD、MMK 或 CNY 后，编辑框也会同步切换。
         </p>
       </section>
 
@@ -800,20 +905,23 @@ function Packages() {
 
           <div className="package-form-grid">
             <FormField
-              label={`套餐售价 / Package Price (${accountingCurrency})`}
+              label={`套餐售价 / Package Price (${displayCurrency})`}
               value={form.package_price}
-              placeholder="228.00"
-              type="number"
-              prefix={accountingCurrency}
-              hint={
-                displayCurrency === accountingCurrency
-                  ? `账本金额：${formatAccountingMoney(
-                      formFinancials.sellingPrice
-                    )}`
-                  : `当前显示：${formatMoney(
-                      formFinancials.sellingPrice
-                    )}`
+              placeholder={
+                displayCurrency === "MMK"
+                  ? "0"
+                  : "0.00"
               }
+              type="number"
+              step={
+                displayCurrency === "MMK"
+                  ? "1"
+                  : "0.01"
+              }
+              prefix={displayCurrency}
+              hint={`保存到账本：${formatAccountingMoney(
+                formFinancials.sellingPrice
+              )}`}
               onChange={(value) =>
                 updateForm(
                   "package_price",
@@ -823,20 +931,23 @@ function Packages() {
             />
 
             <FormField
-              label={`套餐内部成本 / Internal Cost (${accountingCurrency})`}
+              label={`套餐内部成本 / Internal Cost (${displayCurrency})`}
               value={form.cost_price}
-              placeholder="0.00"
-              type="number"
-              prefix={accountingCurrency}
-              hint={
-                displayCurrency === accountingCurrency
-                  ? `账本金额：${formatAccountingMoney(
-                      formFinancials.costPrice
-                    )}`
-                  : `当前显示：${formatMoney(
-                      formFinancials.costPrice
-                    )}`
+              placeholder={
+                displayCurrency === "MMK"
+                  ? "0"
+                  : "0.00"
               }
+              type="number"
+              step={
+                displayCurrency === "MMK"
+                  ? "1"
+                  : "0.01"
+              }
+              prefix={displayCurrency}
+              hint={`保存到账本：${formatAccountingMoney(
+                formFinancials.costPrice
+              )}`}
               onChange={(value) =>
                 updateForm(
                   "cost_price",
@@ -869,7 +980,12 @@ function Packages() {
               onClick={() =>
                 updateForm(
                   "cost_price",
-                  suggestedServiceCost.toFixed(2)
+                  formatCurrencyInput(
+                    convertToDisplay(
+                      suggestedServiceCost
+                    ),
+                    displayCurrency
+                  )
                 )
               }
               style={{
@@ -1742,6 +1858,7 @@ type FormFieldProps = {
   value: string;
   placeholder: string;
   type?: "text" | "number";
+  step?: string;
   prefix?: string;
   hint?: string;
   onChange: (value: string) => void;
@@ -1752,6 +1869,7 @@ function FormField({
   value,
   placeholder,
   type = "text",
+  step,
   prefix,
   hint,
   onChange,
@@ -1778,7 +1896,7 @@ function FormField({
           }
           step={
             type === "number"
-              ? "0.01"
+              ? step ?? "0.01"
               : undefined
           }
           value={value}
@@ -1957,6 +2075,32 @@ function getMarginColor(
   }
 
   return "#15803d";
+}
+
+function formatCurrencyInput(
+  value: number,
+  currency: string
+) {
+  if (!Number.isFinite(value)) {
+    return "";
+  }
+
+  if (currency === "MMK") {
+    return String(Math.round(value));
+  }
+
+  return value
+    .toFixed(2)
+    .replace(/\.00$/, "")
+    .replace(/(\.\d)0$/, "$1");
+}
+
+function roundAccountingAmount(value: number) {
+  if (!Number.isFinite(value)) {
+    return Number.NaN;
+  }
+
+  return Number(value.toFixed(6));
 }
 
 function toNumber(

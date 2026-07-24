@@ -5,6 +5,7 @@ import {
   Routes,
 } from "react-router-dom";
 import FollowUpAutomation from "../pages/FollowUpAutomation";
+import AIBusinessAssistant from "../pages/AIBusinessAssistant";
 import ProtectedRoute from "../components/ProtectedRoute";
 import PermissionRoute from "../components/PermissionRoute";
 import Sidebar from "../components/Sidebar";
@@ -18,7 +19,6 @@ import Products from "../pages/Products";
 import Packages from "../pages/Packages";
 import Orders from "../pages/Orders";
 import Reports from "../pages/Reports";
-import Expenses from "../pages/Expenses";
 import Employees from "../pages/Employees";
 import Settings from "../pages/Settings";
 import Appointments from "../pages/Appointments";
@@ -193,6 +193,15 @@ function AppRouter() {
   }
 />
       <Route
+        path="/ai-business-assistant"
+        element={
+          <ProtectedPage permission="reports">
+            <AIBusinessAssistant />
+          </ProtectedPage>
+        }
+      />
+
+      <Route
         path="/reports"
         element={
           <ProtectedPage permission="reports">
@@ -200,14 +209,7 @@ function AppRouter() {
           </ProtectedPage>
         }
       />
-<Route
-  path="/expenses"
-  element={
-    <ProtectedPage permission="reports">
-      <Expenses />
-    </ProtectedPage>
-  }
-/>
+
       <Route
         path="/inspection"
         element={

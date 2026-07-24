@@ -39,6 +39,12 @@ const menuItems = [
     permission: "dashboard",
   },
   {
+  to: "/ai-business-assistant",
+  label: "AI 经营助手",
+  icon: "🧠",
+  permission: "reports",
+},
+  {
     to: "/appointments",
     label: "预约管理",
     icon: "📅",
