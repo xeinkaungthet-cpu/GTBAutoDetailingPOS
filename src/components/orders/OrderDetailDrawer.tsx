@@ -28,6 +28,321 @@ function OrderDetailDrawer({
     accountingOption,
   } = useCurrency();
 
+
+  function printReceipt() {
+    const printableWindow = window.open(
+      "",
+      "_blank",
+      "width=920,height=900",
+    );
+
+    if (!printableWindow) {
+      alert("浏览器阻止了打印窗口，请允许弹出窗口后重试。");
+      return;
+    }
+
+    const customerName =
+      order.members?.name || "散客 / Walk-in Customer";
+    const customerPhone =
+      order.members?.phone || "—";
+    const vehiclePlate =
+      order.vehicles?.plate_number || "未登记";
+    const vehicleName =
+      [order.vehicles?.brand, order.vehicles?.model]
+        .filter(Boolean)
+        .join(" ") || "—";
+
+    const itemHtml = items
+      .map((item: any, index: number) => {
+        const packageServices =
+          item.packages?.package_services
+            ?.slice()
+            .sort(
+              (a: any, b: any) =>
+                Number(a.sort_order || 0) -
+                Number(b.sort_order || 0),
+            )
+            .map(
+              (packageService: any) =>
+                packageService.services?.service_name,
+            )
+            .filter(Boolean) ?? [];
+
+        const itemName =
+          item.item_name_snapshot ||
+          item.packages?.package_name ||
+          item.services?.service_name ||
+          item.products?.product_name ||
+          item.products?.name ||
+          item.item_name ||
+          `订单项目 ${index + 1}`;
+
+        const itemNameEn =
+          item.item_name_en_snapshot ??
+          item.packages?.package_name_en ??
+          item.services?.service_name_en ??
+          "";
+
+        const normalizedItemType = String(
+          item.item_type ?? "",
+        ).toLowerCase();
+
+        const itemType =
+          item.packages || normalizedItemType === "package"
+            ? "套餐 / Package"
+            : item.services || normalizedItemType === "service"
+              ? "服务 / Service"
+              : "产品 / Product";
+
+        const quantity = Number(item.quantity) || 1;
+        const unitPrice = Number(item.unit_price) || 0;
+        const itemTotal =
+          Number(item.total) || unitPrice * quantity;
+
+        const vehicleSizeCode = String(
+          item.vehicle_size_code ?? "",
+        ).toLowerCase();
+        const vehiclePreset =
+          VEHICLE_SIZE_PRESETS[
+            vehicleSizeCode as VehicleSizeCode
+          ];
+        const vehicleSizeName =
+          item.vehicle_size_name ||
+          vehiclePreset?.nameZh ||
+          "";
+        const vehicleSizeNameEn =
+          item.vehicle_size_name_en ||
+          vehiclePreset?.nameEn ||
+          "";
+
+        const coatingDurationLabel =
+          formatCoatingDuration(
+            item.coating_duration_years,
+            item.coating_duration_unit,
+          );
+        const coatingOptionName = String(
+          item.coating_option_name ?? "",
+        ).trim();
+        const coatingProductName = String(
+          item.coating_product_name ?? "",
+        ).trim();
+        const coatingPriceValue =
+          item.coating_price === null ||
+          item.coating_price === undefined ||
+          item.coating_price === ""
+            ? null
+            : Number(item.coating_price);
+        const hasCoatingOption = Boolean(
+          item.coating_option_id ||
+            coatingOptionName ||
+            coatingProductName ||
+            coatingDurationLabel,
+        );
+
+        const includedHtml =
+          packageServices.length > 0
+            ? `<div class="included"><strong>包含服务 / Included:</strong> ${packageServices
+                .map(escapeReceiptHtml)
+                .join("、")}</div>`
+            : "";
+
+        const vehicleHtml = vehicleSizeName
+          ? `<div class="option vehicle-option">
+              <div class="option-label">VEHICLE SIZE / 车型大小</div>
+              <div class="option-value">${escapeReceiptHtml(
+                vehicleSizeName,
+              )}${
+                vehicleSizeNameEn &&
+                vehicleSizeNameEn !== vehicleSizeName
+                  ? ` / ${escapeReceiptHtml(
+                      vehicleSizeNameEn,
+                    )}`
+                  : ""
+              }</div>
+            </div>`
+          : "";
+
+        const coatingHtml = hasCoatingOption
+          ? `<div class="option coating-option">
+              <div class="option-label">COATING PRODUCT OPTION / 镀晶药剂方案</div>
+              <div class="option-value">${escapeReceiptHtml(
+                [coatingDurationLabel, coatingOptionName]
+                  .filter(Boolean)
+                  .join(" · ") || "镀晶药剂方案",
+              )}</div>
+              ${
+                coatingProductName
+                  ? `<div class="detail-row"><span>药剂 / Product</span><strong>${escapeReceiptHtml(
+                      coatingProductName,
+                    )}</strong></div>`
+                  : ""
+              }
+              ${
+                coatingPriceValue !== null &&
+                Number.isFinite(coatingPriceValue)
+                  ? `<div class="detail-row"><span>方案基础价 / Base Price</span><strong>${escapeReceiptHtml(
+                      formatMoney(coatingPriceValue),
+                    )}</strong></div>`
+                  : ""
+              }
+              <div class="detail-row final"><span>车型计算后单价 / Final Unit Price</span><strong>${escapeReceiptHtml(
+                formatMoney(unitPrice),
+              )}</strong></div>
+            </div>`
+          : "";
+
+        return `<section class="item-card">
+          <div class="item-head">
+            <div>
+              <div class="type-badge">${escapeReceiptHtml(
+                itemType,
+              )}</div>
+              <h3>${escapeReceiptHtml(itemName)}</h3>
+              ${
+                itemNameEn
+                  ? `<p class="name-en">${escapeReceiptHtml(
+                      itemNameEn,
+                    )}</p>`
+                  : ""
+              }
+            </div>
+            <strong class="item-total">${escapeReceiptHtml(
+              formatMoney(itemTotal),
+            )}</strong>
+          </div>
+          ${includedHtml}
+          ${vehicleHtml}
+          ${coatingHtml}
+          <div class="item-meta"><span>数量 / Qty: ${quantity}</span><span>单价 / Unit: ${escapeReceiptHtml(
+            formatMoney(unitPrice),
+          )}</span></div>
+        </section>`;
+      })
+      .join("");
+
+    const generatedAt = new Date().toLocaleString("en-US");
+
+    printableWindow.document.open();
+    printableWindow.document.write(`<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>${escapeReceiptHtml(
+    order.order_no || "GTB Receipt",
+  )}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #eef2f7; color: #0f172a; font-family: Arial, Helvetica, sans-serif; }
+    .receipt { width: 780px; max-width: calc(100% - 28px); margin: 24px auto; background: #fff; border-radius: 18px; overflow: hidden; box-shadow: 0 18px 45px rgba(15,23,42,.12); }
+    .brand { padding: 26px 30px; background: linear-gradient(135deg,#0f172a,#1e293b); color: #fff; }
+    .brand small { color: #60a5fa; font-weight: 800; letter-spacing: 1.5px; }
+    .brand h1 { margin: 7px 0 3px; font-size: 25px; }
+    .brand p { margin: 0; color: #cbd5e1; }
+    .content { padding: 26px 30px 32px; }
+    .order-title { display: flex; justify-content: space-between; gap: 18px; align-items: flex-start; }
+    .order-title h2 { margin: 0; font-size: 22px; }
+    .order-no { color: #2563eb; font-weight: 800; text-align: right; }
+    .info-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; margin-top: 20px; }
+    .info { padding: 12px 14px; border-radius: 11px; background: #f8fafc; }
+    .info span { display: block; color: #64748b; font-size: 11px; font-weight: 700; }
+    .info strong { display: block; margin-top: 4px; overflow-wrap: anywhere; }
+    .section-title { margin: 24px 0 10px; font-size: 17px; }
+    .item-card { margin-top: 12px; padding: 15px; border: 1px solid #dbe3ed; border-radius: 13px; break-inside: avoid; }
+    .item-head { display: flex; justify-content: space-between; gap: 16px; }
+    .item-head h3 { margin: 5px 0 0; font-size: 16px; }
+    .type-badge { display: inline-block; padding: 4px 7px; border-radius: 999px; background: #f1f5f9; color: #475569; font-size: 9px; font-weight: 800; }
+    .name-en { margin: 4px 0 0; color: #64748b; font-size: 11px; }
+    .item-total { color: #15803d; white-space: nowrap; }
+    .included { margin-top: 10px; padding: 9px 10px; border-radius: 9px; background: #fff7ed; color: #9a3412; font-size: 11px; }
+    .option { margin-top: 11px; padding: 11px; border-radius: 10px; }
+    .vehicle-option { border: 1px solid #bfdbfe; background: #eff6ff; }
+    .coating-option { border: 1px solid #ddd6fe; background: #faf5ff; }
+    .option-label { color: #2563eb; font-size: 9px; font-weight: 900; letter-spacing: .8px; }
+    .coating-option .option-label { color: #7c3aed; }
+    .option-value { margin-top: 5px; font-size: 12px; font-weight: 800; }
+    .detail-row { display: flex; justify-content: space-between; gap: 12px; margin-top: 8px; color: #64748b; font-size: 10px; }
+    .detail-row strong { color: #334155; text-align: right; }
+    .detail-row.final { padding-top: 8px; border-top: 1px dashed #ddd6fe; color: #4c1d95; font-weight: 800; }
+    .detail-row.final strong { color: #4c1d95; }
+    .item-meta { display: flex; justify-content: space-between; gap: 12px; margin-top: 11px; color: #64748b; font-size: 10px; font-weight: 700; }
+    .totals { margin-top: 22px; padding: 16px; border: 1px solid #bbf7d0; border-radius: 13px; background: #f0fdf4; }
+    .total-row { display: flex; justify-content: space-between; gap: 12px; margin: 7px 0; color: #475569; }
+    .grand-total { padding-top: 10px; border-top: 1px solid #bbf7d0; color: #0f172a; font-size: 20px; font-weight: 900; }
+    .currency-note { margin-top: 12px; color: #64748b; font-size: 10px; line-height: 1.5; text-align: center; }
+    .footer { padding: 18px 30px; background: #0f172a; color: #94a3b8; text-align: center; font-size: 10px; }
+    @media print {
+      body { background: #fff; }
+      .receipt { width: 100%; max-width: none; margin: 0; border-radius: 0; box-shadow: none; }
+      @page { size: A4; margin: 10mm; }
+    }
+  </style>
+</head>
+<body>
+  <main class="receipt">
+    <header class="brand">
+      <small>PAYMENT RECEIPT</small>
+      <h1>GTB Auto Detailing &amp; Window Film</h1>
+      <p>专业汽车美容与洗车服务</p>
+    </header>
+    <div class="content">
+      <div class="order-title">
+        <div><h2>订单收据 / Order Receipt</h2><div>生成时间 / Generated: ${escapeReceiptHtml(
+          generatedAt,
+        )}</div></div>
+        <div class="order-no">${escapeReceiptHtml(
+          order.order_no || "—",
+        )}</div>
+      </div>
+      <div class="info-grid">
+        <div class="info"><span>客户 / Customer</span><strong>${escapeReceiptHtml(
+          customerName,
+        )}</strong></div>
+        <div class="info"><span>电话 / Phone</span><strong>${escapeReceiptHtml(
+          customerPhone,
+        )}</strong></div>
+        <div class="info"><span>车牌 / Plate</span><strong>${escapeReceiptHtml(
+          vehiclePlate,
+        )}</strong></div>
+        <div class="info"><span>车辆 / Vehicle</span><strong>${escapeReceiptHtml(
+          vehicleName,
+        )}</strong></div>
+      </div>
+      <h2 class="section-title">订单项目 / Items</h2>
+      ${itemHtml || "<p>暂无订单项目</p>"}
+      <div class="totals">
+        <div class="total-row"><span>小计 / Subtotal</span><strong>${escapeReceiptHtml(
+          formatMoney(Number(order.subtotal) || 0),
+        )}</strong></div>
+        <div class="total-row"><span>折扣 / Discount</span><strong>−${escapeReceiptHtml(
+          formatMoney(Number(order.discount) || 0),
+        )}</strong></div>
+        <div class="total-row grand-total"><span>合计 / Total</span><strong>${escapeReceiptHtml(
+          formatMoney(Number(order.total) || 0),
+        )}</strong></div>
+        ${
+          Number(order.received_amount) > 0
+            ? `<div class="total-row"><span>实收 / Received</span><strong>${escapeReceiptHtml(
+                formatMoney(Number(order.received_amount)),
+              )}</strong></div><div class="total-row"><span>找零 / Change</span><strong>${escapeReceiptHtml(
+                formatMoney(Number(order.change_amount) || 0),
+              )}</strong></div>`
+            : ""
+        }
+      </div>
+      <p class="currency-note">显示货币：${escapeReceiptHtml(
+        displayCurrency,
+      )} · 账本货币：${escapeReceiptHtml(
+        accountingCurrency,
+      )}</p>
+    </div>
+    <footer class="footer">感谢选择 GTB Auto Detailing &amp; Window Film · Thank you for choosing us!</footer>
+  </main>
+  <script>window.addEventListener('load', function () { setTimeout(function () { window.print(); }, 250); });<\/script>
+</body>
+</html>`);
+    printableWindow.document.close();
+  }
+
   async function sendReceiptEmail() {
     if (sendingEmail) {
       return;
@@ -70,6 +385,7 @@ function OrderDetailDrawer({
               .filter(Boolean) ?? [];
 
           const itemName =
+            item.item_name_snapshot ||
             item.packages?.package_name ||
             item.services?.service_name ||
             item.products?.product_name ||
@@ -91,6 +407,7 @@ function OrderDetailDrawer({
           return {
             name: itemName,
             nameEn:
+              item.item_name_en_snapshot ??
               item.packages?.package_name_en ??
               item.services?.service_name_en ??
               null,
@@ -103,6 +420,25 @@ function OrderDetailDrawer({
               Number(item.total) || 0,
             includedServices:
               packageServices,
+            vehicleSizeCode:
+              item.vehicle_size_code ?? null,
+            vehicleSizeName:
+              item.vehicle_size_name ?? null,
+            vehicleSizeNameEn:
+              item.vehicle_size_name_en ?? null,
+            coatingOptionName:
+              item.coating_option_name ?? null,
+            coatingDurationValue:
+              item.coating_duration_years ?? null,
+            coatingDurationUnit:
+              item.coating_duration_unit ?? null,
+            coatingProductName:
+              item.coating_product_name ?? null,
+            coatingPrice:
+              item.coating_price === null ||
+              item.coating_price === undefined
+                ? null
+                : Number(item.coating_price),
           };
         },
       );
@@ -319,6 +655,7 @@ function OrderDetailDrawer({
                     .filter(Boolean) ?? [];
 
                 const itemName =
+                  item.item_name_snapshot ||
                   item.packages
                     ?.package_name ||
                   item.services
@@ -329,10 +666,16 @@ function OrderDetailDrawer({
                   item.item_name ||
                   "订单项目";
 
+                const normalizedItemType = String(
+                  item.item_type ?? "",
+                ).toLowerCase();
+
                 const itemType =
-                  item.packages
+                  item.packages ||
+                  normalizedItemType === "package"
                     ? "套餐 / Package"
-                    : item.services
+                    : item.services ||
+                        normalizedItemType === "service"
                       ? "服务 / Service"
                       : "产品 / Product";
 
@@ -345,6 +688,56 @@ function OrderDetailDrawer({
                 const itemTotal =
                   Number(item.total) ||
                   unitPrice * quantity;
+
+                const vehicleSizeCode = String(
+                  item.vehicle_size_code ?? "",
+                ).toLowerCase();
+
+                const vehiclePreset =
+                  VEHICLE_SIZE_PRESETS[
+                    vehicleSizeCode as VehicleSizeCode
+                  ];
+
+                const vehicleSizeName =
+                  item.vehicle_size_name ||
+                  vehiclePreset?.nameZh ||
+                  "";
+
+                const vehicleSizeNameEn =
+                  item.vehicle_size_name_en ||
+                  vehiclePreset?.nameEn ||
+                  "";
+
+                const vehicleSizeIcon =
+                  vehiclePreset?.icon || "🚘";
+
+                const coatingDurationLabel =
+                  formatCoatingDuration(
+                    item.coating_duration_years,
+                    item.coating_duration_unit,
+                  );
+
+                const coatingOptionName = String(
+                  item.coating_option_name ?? "",
+                ).trim();
+
+                const coatingProductName = String(
+                  item.coating_product_name ?? "",
+                ).trim();
+
+                const coatingPriceValue =
+                  item.coating_price === null ||
+                  item.coating_price === undefined ||
+                  item.coating_price === ""
+                    ? null
+                    : Number(item.coating_price);
+
+                const hasCoatingOption = Boolean(
+                  item.coating_option_id ||
+                    coatingOptionName ||
+                    coatingProductName ||
+                    coatingDurationLabel,
+                );
 
                 return (
                   <article
@@ -406,6 +799,89 @@ function OrderDetailDrawer({
                           </span>
                         </div>
                       )}
+
+                    {vehicleSizeName && (
+                      <div style={vehicleOptionBox}>
+                        <div style={optionIcon}>
+                          {vehicleSizeIcon}
+                        </div>
+
+                        <div style={optionContent}>
+                          <span style={optionEyebrow}>
+                            VEHICLE SIZE / 车型大小
+                          </span>
+
+                          <strong style={optionTitle}>
+                            {vehicleSizeName}
+                            {vehicleSizeNameEn &&
+                              vehicleSizeNameEn !==
+                                vehicleSizeName
+                              ? ` / ${vehicleSizeNameEn}`
+                              : ""}
+                          </strong>
+                        </div>
+                      </div>
+                    )}
+
+                    {hasCoatingOption && (
+                      <div style={coatingOptionBox}>
+                        <div style={coatingHeader}>
+                          <div>
+                            <span style={coatingEyebrow}>
+                              COATING PRODUCT OPTION
+                            </span>
+
+                            <strong style={coatingTitle}>
+                              {[
+                                coatingDurationLabel,
+                                coatingOptionName,
+                              ]
+                                .filter(Boolean)
+                                .join(" · ") ||
+                                "镀晶药剂方案"}
+                            </strong>
+                          </div>
+
+                          <span style={coatingBadge}>
+                            🛡️ 镀晶方案
+                          </span>
+                        </div>
+
+                        {coatingProductName && (
+                          <div style={coatingDetailRow}>
+                            <span>药剂 / Product</span>
+                            <strong>
+                              {coatingProductName}
+                            </strong>
+                          </div>
+                        )}
+
+                        {coatingPriceValue !== null &&
+                          Number.isFinite(
+                            coatingPriceValue,
+                          ) && (
+                            <div style={coatingDetailRow}>
+                              <span>
+                                方案基础价 / Base Price
+                              </span>
+                              <strong>
+                                {formatMoney(
+                                  coatingPriceValue,
+                                )}
+                              </strong>
+                            </div>
+                          )}
+
+                        <div style={coatingFinalRow}>
+                          <span>
+                            车型计算后单价 / Final Unit Price
+                          </span>
+                          <strong>
+                            {formatMoney(unitPrice)}
+                          </strong>
+                        </div>
+                      </div>
+                    )}
 
                     <div style={itemMeta}>
                       <span>
@@ -481,7 +957,7 @@ function OrderDetailDrawer({
           <button
             type="button"
             style={printBtn}
-            onClick={() => window.print()}
+            onClick={printReceipt}
           >
             🖨 打印订单
           </button>
@@ -515,6 +991,69 @@ function OrderDetailDrawer({
       </div>
     </div>
   );
+}
+
+type VehicleSizeCode =
+  | "small"
+  | "medium"
+  | "suv"
+  | "large";
+
+const VEHICLE_SIZE_PRESETS: Record<
+  VehicleSizeCode,
+  {
+    nameZh: string;
+    nameEn: string;
+    icon: string;
+  }
+> = {
+  small: {
+    nameZh: "小型车",
+    nameEn: "Small Car",
+    icon: "🚗",
+  },
+  medium: {
+    nameZh: "中型车",
+    nameEn: "Medium Car",
+    icon: "🚘",
+  },
+  suv: {
+    nameZh: "SUV",
+    nameEn: "SUV",
+    icon: "🚙",
+  },
+  large: {
+    nameZh: "大型车",
+    nameEn: "Large Vehicle",
+    icon: "🚐",
+  },
+};
+
+function formatCoatingDuration(
+  value: unknown,
+  unit: unknown,
+) {
+  const numericValue = Number(value);
+
+  if (
+    !Number.isFinite(numericValue) ||
+    numericValue <= 0
+  ) {
+    return "";
+  }
+
+  return String(unit).toLowerCase() === "year"
+    ? `${numericValue}年`
+    : `${numericValue}个月`;
+}
+
+function escapeReceiptHtml(value: unknown) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
 function InformationItem({
@@ -771,6 +1310,112 @@ const includedServices = {
   background: "#f8fafc",
   fontSize: 12,
   lineHeight: 1.5,
+};
+
+const vehicleOptionBox = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  marginTop: 12,
+  padding: 11,
+  border: "1px solid #bfdbfe",
+  borderRadius: 11,
+  background: "#eff6ff",
+};
+
+const optionIcon = {
+  display: "grid",
+  placeItems: "center",
+  width: 36,
+  height: 36,
+  flexShrink: 0,
+  borderRadius: 10,
+  background: "#dbeafe",
+  fontSize: 19,
+};
+
+const optionContent = {
+  minWidth: 0,
+};
+
+const optionEyebrow = {
+  display: "block",
+  color: "#2563eb",
+  fontSize: 9,
+  fontWeight: 900,
+  letterSpacing: "1px",
+};
+
+const optionTitle = {
+  display: "block",
+  marginTop: 3,
+  color: "#0f172a",
+  fontSize: 13,
+};
+
+const coatingOptionBox = {
+  marginTop: 12,
+  padding: 12,
+  border: "1px solid #ddd6fe",
+  borderRadius: 12,
+  background:
+    "linear-gradient(135deg,#f5f3ff,#ffffff)",
+};
+
+const coatingHeader = {
+  display: "flex",
+  alignItems: "flex-start",
+  justifyContent: "space-between",
+  gap: 10,
+};
+
+const coatingEyebrow = {
+  display: "block",
+  color: "#7c3aed",
+  fontSize: 9,
+  fontWeight: 900,
+  letterSpacing: "1px",
+};
+
+const coatingTitle = {
+  display: "block",
+  marginTop: 4,
+  color: "#4c1d95",
+  fontSize: 14,
+  lineHeight: 1.4,
+};
+
+const coatingBadge = {
+  flexShrink: 0,
+  padding: "5px 8px",
+  borderRadius: 999,
+  color: "#6d28d9",
+  background: "#ede9fe",
+  fontSize: 10,
+  fontWeight: 900,
+};
+
+const coatingDetailRow = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  marginTop: 9,
+  color: "#64748b",
+  fontSize: 11,
+};
+
+const coatingFinalRow = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  marginTop: 10,
+  paddingTop: 9,
+  borderTop: "1px dashed #ddd6fe",
+  color: "#4c1d95",
+  fontSize: 12,
+  fontWeight: 900,
 };
 
 const itemMeta = {

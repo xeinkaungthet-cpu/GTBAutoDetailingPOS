@@ -15,6 +15,11 @@ import ServiceCard from "../components/pos/ServiceCard";
 import ServiceFilters from "../components/pos/ServiceFilters";
 
 import ShoppingCart, { type PosCartItem } from "../components/pos/ShoppingCart";
+import POSServiceOptionsModal, {
+  type PosCoatingOption,
+  type PosServiceSelection,
+  type PosVehiclePrice,
+} from "../components/pos/POSServiceOptionsModal";
 import OrderDetailDrawer from "../components/orders/OrderDetailDrawer";
 
 type Product = {
@@ -52,6 +57,15 @@ function POS() {
   const [packages, setPackages] = useState<Package[]>([]);
 
   const [products, setProducts] = useState<Product[]>([]);
+
+  const [serviceVehiclePrices, setServiceVehiclePrices] = useState<
+    PosVehiclePrice[]
+  >([]);
+
+  const [coatingOptions, setCoatingOptions] = useState<PosCoatingOption[]>([]);
+
+  const [configuringService, setConfiguringService] =
+    useState<Service | null>(null);
 
   const [cart, setCart] = useState<PosCartItem[]>([]);
 
@@ -216,28 +230,60 @@ function POS() {
     setLoading(true);
 
     try {
-      const [memberData, serviceData, packageData, productResult] =
-        await Promise.all([
-          MemberService.getAll(),
-          ServiceService.getAll(),
-          PackageService.getActive(),
-          supabase
-            .from("products")
-            .select(
-              "id, sku, product_name, category, brand, cost_price, selling_price, stock_qty, min_stock, unit, barcode, is_active",
-            )
-            .eq("is_active", true)
-            .order("product_name"),
-        ]);
+      const [
+        memberData,
+        serviceData,
+        packageData,
+        productResult,
+        vehiclePriceResult,
+        coatingOptionResult,
+      ] = await Promise.all([
+        MemberService.getAll(),
+        ServiceService.getAll(),
+        PackageService.getActive(),
+        supabase
+          .from("products")
+          .select(
+            "id, sku, product_name, category, brand, cost_price, selling_price, stock_qty, min_stock, unit, barcode, is_active",
+          )
+          .eq("is_active", true)
+          .order("product_name"),
+        supabase
+          .from("service_vehicle_prices")
+          .select(
+            "service_id, vehicle_size_code, price, cost_price, duration_minutes, is_active",
+          ),
+        supabase
+          .from("service_coating_options")
+          .select(
+            "id, service_id, option_name, duration_years, duration_unit, price, description, product_name, is_recommended, is_active, sort_order",
+          )
+          .eq("is_active", true)
+          .order("sort_order", { ascending: true }),
+      ]);
 
       if (productResult.error) {
         throw productResult.error;
+      }
+
+      if (vehiclePriceResult.error) {
+        throw vehiclePriceResult.error;
+      }
+
+      if (coatingOptionResult.error) {
+        throw coatingOptionResult.error;
       }
 
       setMembers(memberData);
       setServices(serviceData);
       setPackages(packageData);
       setProducts((productResult.data ?? []) as Product[]);
+      setServiceVehiclePrices(
+        (vehiclePriceResult.data ?? []) as PosVehiclePrice[],
+      );
+      setCoatingOptions(
+        (coatingOptionResult.data ?? []) as PosCoatingOption[],
+      );
     } catch (error: unknown) {
       alert(getErrorMessage(error));
 
@@ -313,22 +359,51 @@ function POS() {
   }
 
   function addServiceToCart(service: Service) {
+    setConfiguringService(service);
+  }
+
+  function confirmServiceOptions(selection: PosServiceSelection) {
+    const { service, coatingOption } = selection;
+    const serviceNameEn = String(
+      (service as Service & { service_name_en?: string | null })
+        .service_name_en ?? "",
+    );
+
     addCartItem({
-      key: `service-${service.id}`,
+      key: [
+        "service",
+        service.id,
+        selection.vehicleSizeCode,
+        coatingOption?.id ?? "standard",
+      ].join("-"),
       itemType: "service",
       serviceId: service.id,
       packageId: null,
       productId: null,
       name: service.service_name,
-      nameEn: null,
-      price: Number(service.price),
+      nameEn: serviceNameEn || null,
+      price: selection.finalPrice,
       originalPrice: null,
       includedServices: [],
       sku: null,
       unit: null,
       stockQty: null,
       maxQuantity: null,
+
+      vehicleSizeCode: selection.vehicleSizeCode,
+      vehicleSizeName: selection.vehicleSizeName,
+      vehicleSizeNameEn: selection.vehicleSizeNameEn,
+      vehicleSizeIcon: selection.vehicleSizeIcon,
+
+      coatingOptionId: coatingOption?.id ?? null,
+      coatingOptionName: coatingOption?.option_name ?? null,
+      coatingDurationYears: coatingOption?.duration_years ?? null,
+      coatingDurationUnit: coatingOption?.duration_unit ?? null,
+      coatingProductName: coatingOption?.product_name ?? null,
+      coatingPrice: coatingOption ? Number(coatingOption.price) : null,
     });
+
+    setConfiguringService(null);
   }
 
   function addPackageToCart(packageItem: Package) {
@@ -488,6 +563,14 @@ function POS() {
         id: Number(itemId),
         quantity: item.quantity,
         discount: 0,
+        vehicle_size_code:
+          item.itemType === "service"
+            ? item.vehicleSizeCode ?? null
+            : null,
+        coating_option_id:
+          item.itemType === "service"
+            ? item.coatingOptionId ?? null
+            : null,
       };
     });
 
@@ -557,6 +640,17 @@ function POS() {
         unit_price: Number(item.price),
         discount: 0,
         total: Number(item.price) * item.quantity,
+        vehicle_size_code: item.vehicleSizeCode ?? null,
+        vehicle_size_name: item.vehicleSizeName ?? null,
+        vehicle_size_name_en: item.vehicleSizeNameEn ?? null,
+        coating_option_id: item.coatingOptionId ?? null,
+        coating_option_name: item.coatingOptionName ?? null,
+        coating_duration_years: item.coatingDurationYears ?? null,
+        coating_duration_unit: item.coatingDurationUnit ?? null,
+        coating_product_name: item.coatingProductName ?? null,
+        coating_price: item.coatingPrice ?? null,
+        item_name_snapshot: item.name,
+        item_name_en_snapshot: item.nameEn ?? null,
         services:
           item.itemType === "service"
             ? {
@@ -936,15 +1030,19 @@ function POS() {
 
                   <div style={serviceGrid}>
                     {filteredServices.map((service) => {
-                      const cartItem = cart.find(
-                        (item) => item.key === `service-${service.id}`,
-                      );
+                      const serviceQuantity = cart
+                        .filter(
+                          (item) =>
+                            item.itemType === "service" &&
+                            item.serviceId === service.id,
+                        )
+                        .reduce((sum, item) => sum + item.quantity, 0);
 
                       return (
                         <ServiceCard
                           key={service.id}
                           service={service}
-                          quantity={cartItem?.quantity || 0}
+                          quantity={serviceQuantity}
                           onClick={() => addServiceToCart(service)}
                         />
                       );
@@ -971,6 +1069,18 @@ function POS() {
         />
       </div>
 
+
+      <POSServiceOptionsModal
+        service={configuringService}
+        vehiclePrices={serviceVehiclePrices.filter(
+          (row) => row.service_id === configuringService?.id,
+        )}
+        coatingOptions={coatingOptions.filter(
+          (row) => row.service_id === configuringService?.id,
+        )}
+        onClose={() => setConfiguringService(null)}
+        onConfirm={confirmServiceOptions}
+      />
       {checkingOut && (
         <div style={checkoutOverlay}>
           <div style={checkoutMessage}>正在建立订单，请稍候...</div>
@@ -995,6 +1105,8 @@ type CheckoutItemPayload = {
   id: number;
   quantity: number;
   discount: number;
+  vehicle_size_code?: "small" | "medium" | "suv" | "large" | null;
+  coating_option_id?: number | null;
 };
 
 type CheckoutRpcResult = {

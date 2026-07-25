@@ -33,6 +33,16 @@ type ReceiptItem = {
   total: number;
 
   includedServices?: string[];
+
+  vehicleSizeCode?: string | null;
+  vehicleSizeName?: string | null;
+  vehicleSizeNameEn?: string | null;
+
+  coatingOptionName?: string | null;
+  coatingDurationValue?: number | string | null;
+  coatingDurationUnit?: string | null;
+  coatingProductName?: string | null;
+  coatingPrice?: number | null;
 };
 
 type ReceiptRequest = {
@@ -329,6 +339,24 @@ function getPaymentName(
   );
 }
 
+function formatCoatingDuration(
+  value: unknown,
+  unit: unknown,
+): string {
+  const numericValue = Number(value);
+
+  if (
+    !Number.isFinite(numericValue) ||
+    numericValue <= 0
+  ) {
+    return "";
+  }
+
+  return String(unit).toLowerCase() === "year"
+    ? `${numericValue}年 / ${numericValue} Year${numericValue === 1 ? "" : "s"}`
+    : `${numericValue}个月 / ${numericValue} Month${numericValue === 1 ? "" : "s"}`;
+}
+
 function buildItemsHtml(
   items: ReceiptItem[],
   currencySettings: CurrencySettings,
@@ -361,6 +389,170 @@ function buildItemsHtml(
             </div>
           `
           : "";
+
+      const vehicleSizeLabel = [
+        item.vehicleSizeName,
+        item.vehicleSizeNameEn &&
+        item.vehicleSizeNameEn !== item.vehicleSizeName
+          ? item.vehicleSizeNameEn
+          : null,
+      ]
+        .filter(Boolean)
+        .map(escapeHtml)
+        .join(" / ");
+
+      const vehicleHtml = vehicleSizeLabel
+        ? `
+          <div
+            style="
+              margin-top: 9px;
+              padding: 10px 12px;
+              border: 1px solid #bfdbfe;
+              border-radius: 9px;
+              background: #eff6ff;
+            "
+          >
+            <div
+              style="
+                color: #2563eb;
+                font-size: 10px;
+                font-weight: 800;
+                letter-spacing: 0.7px;
+              "
+            >
+              VEHICLE SIZE / 车型大小
+            </div>
+            <div
+              style="
+                margin-top: 4px;
+                color: #0f172a;
+                font-size: 13px;
+                font-weight: 800;
+              "
+            >
+              ${vehicleSizeLabel}
+            </div>
+          </div>
+        `
+        : "";
+
+      const coatingDurationLabel =
+        formatCoatingDuration(
+          item.coatingDurationValue,
+          item.coatingDurationUnit,
+        );
+
+      const coatingSummary = [
+        coatingDurationLabel,
+        item.coatingOptionName,
+      ]
+        .filter(Boolean)
+        .map(escapeHtml)
+        .join(" · ");
+
+      const hasCoatingOption = Boolean(
+        coatingSummary ||
+        item.coatingProductName ||
+        item.coatingPrice !== null &&
+          item.coatingPrice !== undefined,
+      );
+
+      const coatingHtml = hasCoatingOption
+        ? `
+          <div
+            style="
+              margin-top: 9px;
+              padding: 11px 12px;
+              border: 1px solid #ddd6fe;
+              border-radius: 9px;
+              background: #faf5ff;
+            "
+          >
+            <div
+              style="
+                color: #7c3aed;
+                font-size: 10px;
+                font-weight: 800;
+                letter-spacing: 0.7px;
+              "
+            >
+              COATING PRODUCT OPTION / 镀晶药剂方案
+            </div>
+            <div
+              style="
+                margin-top: 4px;
+                color: #4c1d95;
+                font-size: 13px;
+                font-weight: 800;
+              "
+            >
+              ${coatingSummary || "镀晶药剂方案"}
+            </div>
+            ${
+              item.coatingProductName
+                ? `
+                  <div
+                    style="
+                      display: flex;
+                      justify-content: space-between;
+                      gap: 12px;
+                      margin-top: 9px;
+                      color: #64748b;
+                      font-size: 11px;
+                    "
+                  >
+                    <span>药剂 / Product</span>
+                    <strong style="color: #334155; text-align: right;">
+                      ${escapeHtml(item.coatingProductName)}
+                    </strong>
+                  </div>
+                `
+                : ""
+            }
+            ${
+              item.coatingPrice !== null &&
+              item.coatingPrice !== undefined &&
+              Number.isFinite(Number(item.coatingPrice))
+                ? `
+                  <div
+                    style="
+                      display: flex;
+                      justify-content: space-between;
+                      gap: 12px;
+                      margin-top: 8px;
+                      color: #64748b;
+                      font-size: 11px;
+                    "
+                  >
+                    <span>方案基础价 / Base Price</span>
+                    <strong style="color: #334155;">
+                      ${formatMoney(item.coatingPrice, currencySettings)}
+                    </strong>
+                  </div>
+                `
+                : ""
+            }
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                gap: 12px;
+                margin-top: 9px;
+                padding-top: 9px;
+                border-top: 1px dashed #ddd6fe;
+                color: #4c1d95;
+                font-size: 11px;
+                font-weight: 800;
+              "
+            >
+              <span>车型计算后单价 / Final Unit Price</span>
+              <strong>
+                ${formatMoney(item.unitPrice, currencySettings)}
+              </strong>
+            </div>
+          </div>
+        `
+        : "";
 
       const typeName =
         item.itemType === "package"
@@ -417,6 +609,8 @@ function buildItemsHtml(
             </span>
 
             ${includedHtml}
+            ${vehicleHtml}
+            ${coatingHtml}
           </td>
 
           <td

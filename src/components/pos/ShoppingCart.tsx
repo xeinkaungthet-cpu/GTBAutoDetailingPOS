@@ -21,6 +21,18 @@ export type PosCartItem = {
   stockQty?: number | null;
   maxQuantity?: number | null;
 
+  vehicleSizeCode?: "small" | "medium" | "suv" | "large" | null;
+  vehicleSizeName?: string | null;
+  vehicleSizeNameEn?: string | null;
+  vehicleSizeIcon?: string | null;
+
+  coatingOptionId?: number | null;
+  coatingOptionName?: string | null;
+  coatingDurationYears?: number | null;
+  coatingDurationUnit?: "month" | "year" | string | null;
+  coatingProductName?: string | null;
+  coatingPrice?: number | null;
+
   quantity: number;
 };
 
@@ -55,44 +67,11 @@ function ShoppingCart({
   onRemove,
   onCheckout,
 }: Props) {
-  const {
-    formatMoney,
-    convertToDisplay,
-    convertToAccounting,
-    currentOption,
-    accountingOption,
-  } = useCurrency();
-
-  const displayDiscount = roundCurrencyInput(
-    convertToDisplay(discount),
-    currentOption.code,
-  );
-
-  function handleDiscountInput(value: string) {
-    const displayValue = Number(value);
-
-    if (!Number.isFinite(displayValue)) {
-      onDiscountChange(0);
-      return;
-    }
-
-    const accountingValue = convertToAccounting(Math.max(0, displayValue));
-    onDiscountChange(Math.max(0, accountingValue));
-  }
+  const { formatMoney } = useCurrency();
 
   return (
     <aside style={card}>
       <h2 style={heading}>购物车 / Cart</h2>
-
-      <div style={currencyStatus}>
-        <span>
-          收银显示：{currentOption.symbol} {currentOption.code}
-        </span>
-        <span style={currencyArrow}>→</span>
-        <span>
-          账本保存：{accountingOption.symbol} {accountingOption.code}
-        </span>
-      </div>
 
       {cart.length === 0 ? (
         <div style={emptyCart}>
@@ -124,6 +103,26 @@ function ShoppingCart({
                   </div>
 
                   {item.nameEn && <p style={englishName}>{item.nameEn}</p>}
+
+                  {item.itemType === "service" && item.vehicleSizeName && (
+                    <div style={serviceOptionMeta}>
+                      <span>
+                        {item.vehicleSizeIcon || "🚗"} 车型：{item.vehicleSizeName}
+                        {item.vehicleSizeNameEn ? ` / ${item.vehicleSizeNameEn}` : ""}
+                      </span>
+
+                      {item.coatingOptionId && (
+                        <span>
+                          🛡️ {formatCoatingDuration(item)}
+                          {item.coatingOptionName ? ` · ${item.coatingOptionName}` : ""}
+                        </span>
+                      )}
+
+                      {item.coatingProductName && (
+                        <span>药剂：{item.coatingProductName}</span>
+                      )}
+                    </div>
+                  )}
 
                   {item.itemType === "product" && (
                     <div style={productMeta}>
@@ -210,23 +209,17 @@ function ShoppingCart({
 
       <hr style={divider} />
 
-      <label style={fieldLabel}>
-        折扣 / Discount ({currentOption.code})
-      </label>
+      <label style={fieldLabel}>折扣 / Discount</label>
 
       <input
         type="number"
         min="0"
-        step={currentOption.code === "MMK" ? "1" : "0.01"}
-        value={displayDiscount}
-        onChange={(event) => handleDiscountInput(event.target.value)}
+        step="0.01"
+        value={discount}
+        onChange={(event) => onDiscountChange(Number(event.target.value))}
         style={input}
         disabled={checkingOut}
       />
-
-      <p style={currencyHint}>
-        输入当前显示货币；结账时自动换算并保存为 {accountingOption.code}。
-      </p>
 
       <label style={fieldLabel}>付款方式 / Payment</label>
 
@@ -276,15 +269,16 @@ function ShoppingCart({
   );
 }
 
-function roundCurrencyInput(value: number, currencyCode: string) {
-  if (!Number.isFinite(value)) {
-    return 0;
+function formatCoatingDuration(item: PosCartItem) {
+  const amount = Number(item.coatingDurationYears ?? 0);
+
+  if (!amount) {
+    return "镀晶方案";
   }
 
-  const decimals = currencyCode === "MMK" ? 0 : 2;
-  const factor = 10 ** decimals;
-
-  return Math.round(value * factor) / factor;
+  return item.coatingDurationUnit === "year"
+    ? `${amount} 年`
+    : `${amount} 个月`;
 }
 
 function normalizeMaximum(value: number | null | undefined) {
@@ -333,28 +327,8 @@ const card = {
 };
 
 const heading = {
-  margin: "0 0 12px",
+  margin: "0 0 16px",
   color: "#111827",
-};
-
-const currencyStatus = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  flexWrap: "wrap" as const,
-  gap: 7,
-  marginBottom: 16,
-  padding: "9px 11px",
-  borderRadius: 11,
-  border: "1px solid #bfdbfe",
-  background: "#eff6ff",
-  color: "#1e40af",
-  fontSize: 11,
-  fontWeight: 900,
-};
-
-const currencyArrow = {
-  color: "#64748b",
 };
 
 const emptyCart = {
@@ -441,6 +415,18 @@ const englishName = {
   margin: "4px 0 0",
   color: "#6b7280",
   fontSize: 12,
+};
+
+const serviceOptionMeta = {
+  display: "grid",
+  gap: 4,
+  marginTop: 8,
+  padding: 9,
+  borderRadius: 10,
+  background: "#f5f3ff",
+  color: "#5b21b6",
+  fontSize: 11,
+  fontWeight: 800,
 };
 
 const productMeta = {
@@ -537,13 +523,6 @@ const fieldLabel = {
   marginTop: 10,
   color: "#4b5563",
   fontWeight: 800,
-};
-
-const currencyHint = {
-  margin: "-5px 0 12px",
-  color: "#64748b",
-  fontSize: 11,
-  lineHeight: 1.5,
 };
 
 const input = {
