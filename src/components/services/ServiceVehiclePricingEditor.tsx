@@ -71,7 +71,14 @@ export default function ServiceVehiclePricingEditor({
         VehiclePricingService.getServicePrices(serviceId, false),
       ]);
 
-      setRows(buildRows(sizes, prices, convertToDisplay));
+      setRows(
+        buildRows(
+          sizes,
+          prices,
+          convertToDisplay,
+          displayCurrency
+        )
+      );
     } catch (loadError: unknown) {
       setError(getErrorMessage(loadError));
     } finally {
@@ -281,6 +288,7 @@ export default function ServiceVehiclePricingEditor({
                     <VehiclePriceField
                       label={`销售价格 (${displayCurrency})`}
                       value={row.price}
+                      step={displayCurrency === "MMK" ? "1" : "0.01"}
                       onChange={(value) =>
                         updateRow(row.code, "price", value)
                       }
@@ -289,6 +297,7 @@ export default function ServiceVehiclePricingEditor({
                     <VehiclePriceField
                       label={`内部成本 (${displayCurrency})`}
                       value={row.costPrice}
+                      step={displayCurrency === "MMK" ? "1" : "0.01"}
                       onChange={(value) =>
                         updateRow(row.code, "costPrice", value)
                       }
@@ -409,7 +418,8 @@ function VehiclePriceField({
 function buildRows(
   sizes: VehicleSizeOption[],
   prices: ServiceVehiclePrice[],
-  convertToDisplay: (value: number) => number
+  convertToDisplay: (value: number) => number,
+  displayCurrency: string
 ): EditableVehiclePrice[] {
   const orderedSizes = [...sizes].sort((first, second) => {
     const firstDefaultOrder = DEFAULT_SIZE_ORDER.indexOf(first.code);
@@ -443,10 +453,12 @@ function buildRows(
       nameEn: size.name_en,
       icon: size.icon || "🚗",
       price: formatInput(
-        convertToDisplay(toNumber(priceRow?.price))
+        convertToDisplay(toNumber(priceRow?.price)),
+        displayCurrency
       ),
       costPrice: formatInput(
-        convertToDisplay(toNumber(priceRow?.cost_price))
+        convertToDisplay(toNumber(priceRow?.cost_price)),
+        displayCurrency
       ),
       durationMinutes: String(
         Math.max(0, Math.round(toNumber(priceRow?.duration_minutes)))
@@ -461,12 +473,16 @@ function toNumber(value: unknown) {
   return Number.isFinite(result) ? result : 0;
 }
 
-function formatInput(value: number) {
+function formatInput(value: number, displayCurrency: string) {
   if (!Number.isFinite(value)) {
     return "0";
   }
 
-  return String(Number(value.toFixed(6)));
+  if (displayCurrency === "MMK") {
+    return String(Math.round(value));
+  }
+
+  return String(Number(value.toFixed(2)));
 }
 
 function roundAccountingAmount(value: number) {

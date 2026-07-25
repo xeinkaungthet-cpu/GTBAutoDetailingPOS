@@ -20,7 +20,9 @@ import BookingModal from "../components/menu/BookingModal";
 import Footer from "../components/menu/Footer";
 import PackageCard from "../components/menu/PackageCard";
 import { QRCodeSVG } from "qrcode.react";
-import ItemDetailModal from "../components/menu/ItemDetailModal";
+import ItemDetailModal, {
+  type CoatingOption,
+} from "../components/menu/ItemDetailModal";
 import CertificatesSection from "../components/menu/CertificatesSection";
 type ViewMode =
   | "all"
@@ -66,6 +68,12 @@ const defaultBusinessProfile: PublicBusinessProfile = {
 function CustomerMenu() {
   const [services, setServices] = useState<Service[]>([]);
   const [packages, setPackages] = useState<Package[]>([]);
+
+  const [coatingOptionsByService, setCoatingOptionsByService] =
+    useState<Record<number, CoatingOption[]>>({});
+
+  const [selectedCoatingOption, setSelectedCoatingOption] =
+    useState<CoatingOption | null>(null);
 
   const [vehicleSizes, setVehicleSizes] = useState<
     VehicleSizeOption[]
@@ -124,6 +132,7 @@ const [detailPackage, setDetailPackage] =
         vehicleSizeData,
         serviceVehiclePriceData,
         packageVehiclePriceData,
+        coatingOptionsResponse,
         profileResponse,
       ] = await Promise.all([
         ServiceService.getAll(),
@@ -131,6 +140,9 @@ const [detailPackage, setDetailPackage] =
         VehiclePricingService.getVehicleSizes(true),
         VehiclePricingService.getAllServicePrices(true),
         VehiclePricingService.getAllPackagePrices(true),
+        supabase.rpc(
+          "get_public_service_coating_options"
+        ),
         supabase.rpc(
           "get_public_business_profile"
         ),
@@ -145,6 +157,30 @@ const [detailPackage, setDetailPackage] =
       setPackageVehiclePrices(
         packageVehiclePriceData
       );
+
+      if (coatingOptionsResponse.error) {
+        console.error(
+          "读取镀晶期限方案失败。请先运行 public_coating_options_menu_fix.sql：",
+          coatingOptionsResponse.error
+        );
+        setCoatingOptionsByService({});
+      } else {
+        const groupedOptions = (
+          (coatingOptionsResponse.data ?? []) as CoatingOption[]
+        ).reduce<Record<number, CoatingOption[]>>(
+          (result, option) => {
+            if (!result[option.service_id]) {
+              result[option.service_id] = [];
+            }
+
+            result[option.service_id].push(option);
+            return result;
+          },
+          {}
+        );
+
+        setCoatingOptionsByService(groupedOptions);
+      }
 
       if (
         vehicleSizeData.length > 0 &&
@@ -306,6 +342,47 @@ const [detailPackage, setDetailPackage] =
       selectedVehicleSize,
     ]
   );
+
+  function getAdjustedCoatingOptions(
+    serviceId: number
+  ): CoatingOption[] {
+    const options =
+      coatingOptionsByService[serviceId] ?? [];
+
+    const selectedPriceRow = serviceVehiclePrices.find(
+      (priceRow) =>
+        Number(priceRow.service_id) === Number(serviceId) &&
+        priceRow.vehicle_size_code === selectedVehicleSize &&
+        priceRow.is_active
+    );
+
+    const smallPriceRow = serviceVehiclePrices.find(
+      (priceRow) =>
+        Number(priceRow.service_id) === Number(serviceId) &&
+        priceRow.vehicle_size_code === "small" &&
+        priceRow.is_active
+    );
+
+    const selectedVehiclePrice = Number(
+      selectedPriceRow?.price ?? 0
+    );
+
+    const smallVehiclePrice = Number(
+      smallPriceRow?.price ?? selectedVehiclePrice
+    );
+
+    const vehicleDifference = Math.max(
+      0,
+      selectedVehiclePrice - smallVehiclePrice
+    );
+
+    return options.map((option) => ({
+      ...option,
+      price:
+        Number(option.price || 0) +
+        vehicleDifference,
+    }));
+  }
 
   const activeServices = useMemo(
     () =>
@@ -1078,10 +1155,16 @@ function scrollToTop() {
 {detailService && (
   <ItemDetailModal
     service={detailService}
+    coatingOptions={
+      getAdjustedCoatingOptions(detailService.id)
+    }
     onClose={() =>
       setDetailService(null)
     }
-    onBook={() => {
+    onBook={(coatingOption) => {
+      setSelectedCoatingOption(
+        coatingOption ?? null
+      );
       setSelectedService(detailService);
       setDetailService(null);
     }}
@@ -1101,30 +1184,56 @@ function scrollToTop() {
   />
 )}
       {selectedService && (
-  <BookingModal
-    service={selectedService}
-    vehicleSizeCode={selectedVehicleSize}
-    vehicleSizeName={selectedVehicleOption?.name_zh}
-    vehicleSizeNameEn={selectedVehicleOption?.name_en}
-    vehicleSizeIcon={selectedVehicleOption?.icon}
-    quotedPrice={Number(selectedService.price ?? 0)}
-    onClose={() => setSelectedService(null)}
-  />
-)}
+        <BookingModal
+          service={selectedService}
+          vehicleSizeCode={selectedVehicleSize}
+          vehicleSizeName={
+            selectedVehicleOption?.name_zh
+          }
+          vehicleSizeNameEn={
+            selectedVehicleOption?.name_en
+          }
+          vehicleSizeIcon={
+            selectedVehicleOption?.icon
+          }
+          coatingOption={
+            selectedCoatingOption ?? undefined
+          }
+          quotedPrice={
+            selectedCoatingOption
+              ? Number(
+                  selectedCoatingOption.price || 0
+                )
+              : Number(selectedService.price || 0)
+          }
+          onClose={() => {
+            setSelectedService(null);
+            setSelectedCoatingOption(null);
+          }}
+        />
+      )}
 
-{selectedPackage && (
-  <BookingModal
-    packageItem={selectedPackage}
-    vehicleSizeCode={selectedVehicleSize}
-    vehicleSizeName={selectedVehicleOption?.name_zh}
-    vehicleSizeNameEn={selectedVehicleOption?.name_en}
-    vehicleSizeIcon={selectedVehicleOption?.icon}
-    quotedPrice={Number(
-      selectedPackage.package_price ?? 0
-    )}
-    onClose={() => setSelectedPackage(null)}
-  />
-)}
+      {selectedPackage && (
+        <BookingModal
+          packageItem={selectedPackage}
+          vehicleSizeCode={selectedVehicleSize}
+          vehicleSizeName={
+            selectedVehicleOption?.name_zh
+          }
+          vehicleSizeNameEn={
+            selectedVehicleOption?.name_en
+          }
+          vehicleSizeIcon={
+            selectedVehicleOption?.icon
+          }
+          quotedPrice={Number(
+            selectedPackage.package_price || 0
+          )}
+          onClose={() =>
+            setSelectedPackage(null)
+          }
+        />
+      )}
       <div style={floatingActions}>
         {phoneLink && (
           <a

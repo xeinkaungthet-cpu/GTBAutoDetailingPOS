@@ -1,30 +1,94 @@
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
 import type { Service } from "../../types/database";
 import type { Package } from "../../services/packageService";
 import useCurrency from "../../hooks/useCurrency";
 
+export type CoatingDurationUnit = "month" | "year";
+
+export type CoatingOption = {
+  id: number;
+  service_id: number;
+  option_name: string;
+  duration_years: number;
+  duration_unit: CoatingDurationUnit | string | null;
+  price: number | string;
+  description: string | null;
+  product_name: string | null;
+  is_recommended: boolean;
+  is_active: boolean;
+  sort_order: number;
+};
+
 type Props = {
   service?: Service;
   packageItem?: Package;
+  coatingOptions?: CoatingOption[];
   onClose: () => void;
-  onBook: () => void;
+  onBook: (coatingOption?: CoatingOption) => void;
 };
 
 function ItemDetailModal({
   service,
   packageItem,
+  coatingOptions = [],
   onClose,
   onBook,
 }: Props) {
-  const {
-    formatMoney,
-    displayCurrency,
-  } = useCurrency();
+  const { formatMoney } = useCurrency();
+
+  const activeCoatingOptions = useMemo(
+    () =>
+      coatingOptions
+        .filter((option) => option.is_active !== false)
+        .sort((first, second) => {
+          const sortDifference =
+            Number(first.sort_order || 0) -
+            Number(second.sort_order || 0);
+
+          if (sortDifference !== 0) {
+            return sortDifference;
+          }
+
+          return (
+            toMonths(first) - toMonths(second)
+          );
+        }),
+    [coatingOptions]
+  );
+
+  const [selectedCoatingOptionId, setSelectedCoatingOptionId] =
+    useState<number | null>(null);
+
+  useEffect(() => {
+    if (activeCoatingOptions.length === 0) {
+      setSelectedCoatingOptionId(null);
+      return;
+    }
+
+    const recommended = activeCoatingOptions.find(
+      (option) => option.is_recommended
+    );
+
+    setSelectedCoatingOptionId(
+      recommended?.id ?? activeCoatingOptions[0].id
+    );
+  }, [service?.id, activeCoatingOptions]);
 
   if (!service && !packageItem) {
     return null;
   }
 
   const isPackage = Boolean(packageItem);
+
+  const selectedCoatingOption =
+    activeCoatingOptions.find(
+      (option) => option.id === selectedCoatingOptionId
+    ) ?? activeCoatingOptions[0];
 
   const title = isPackage
     ? packageItem?.package_name
@@ -46,20 +110,13 @@ function ItemDetailModal({
     ? packageItem?.image_url
     : service?.image_url;
 
-  const price = isPackage
+  const normalPrice = isPackage
     ? Number(packageItem?.package_price || 0)
     : Number(service?.price || 0);
 
-  const originalPrice = isPackage
-    ? Number(packageItem?.original_price || 0)
-    : 0;
-
-  const savings = isPackage
-    ? Math.max(originalPrice - price, 0)
-    : 0;
-
-  const showOriginalPrice =
-    isPackage && originalPrice > price;
+  const displayedPrice = selectedCoatingOption
+    ? Number(selectedCoatingOption.price || 0)
+    : normalPrice;
 
   const includedServices =
     packageItem?.package_services
@@ -106,9 +163,7 @@ function ItemDetailModal({
             GTB Auto Detailing & Window Film
           </p>
 
-          <h2 style={titleStyle}>
-            {title}
-          </h2>
+          <h2 style={titleStyle}>{title}</h2>
 
           {englishTitle && (
             <p style={englishTitleStyle}>
@@ -143,18 +198,10 @@ function ItemDetailModal({
                     >
                       <span style={checkIcon}>✓</span>
 
-                      <div style={includedServiceContent}>
-                        <div style={includedServiceHeader}>
-                          <strong>
-                            {item?.service_name}
-                          </strong>
-
-                          <span style={includedServicePrice}>
-                            {formatMoney(
-                              Number(item?.price || 0)
-                            )}
-                          </span>
-                        </div>
+                      <div>
+                        <strong>
+                          {item?.service_name}
+                        </strong>
 
                         {item?.service_name_en && (
                           <small style={includedEnglish}>
@@ -170,6 +217,110 @@ function ItemDetailModal({
                   暂无套餐内容 / No services listed
                 </p>
               )}
+            </section>
+          )}
+
+          {!isPackage && activeCoatingOptions.length > 0 && (
+            <section style={coatingSection}>
+              <div style={coatingHeader}>
+                <div>
+                  <p style={coatingEyebrow}>
+                    CERAMIC COATING OPTIONS
+                  </p>
+
+                  <h3 style={coatingTitle}>
+                    选择镀晶药剂期限 / Choose Durability
+                  </h3>
+
+                  <p style={coatingDescription}>
+                    请选择需要的药剂有效月份或年份，价格会自动更新。
+                  </p>
+                </div>
+
+                <span style={coatingCountBadge}>
+                  {activeCoatingOptions.length} 个方案
+                </span>
+              </div>
+
+              <div style={coatingGrid}>
+                {activeCoatingOptions.map((option) => {
+                  const selected =
+                    option.id === selectedCoatingOption?.id;
+
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() =>
+                        setSelectedCoatingOptionId(option.id)
+                      }
+                      aria-pressed={selected}
+                      style={{
+                        ...coatingCard,
+                        borderColor: selected
+                          ? "#7c3aed"
+                          : "#ddd6fe",
+                        background: selected
+                          ? "linear-gradient(145deg,#f5f3ff,#ede9fe)"
+                          : "#ffffff",
+                        boxShadow: selected
+                          ? "0 14px 30px rgba(124,58,237,.16)"
+                          : "0 8px 20px rgba(15,23,42,.05)",
+                        transform: selected
+                          ? "translateY(-2px)"
+                          : "none",
+                      }}
+                    >
+                      <div style={coatingCardTop}>
+                        <strong style={coatingDuration}>
+                          {formatDuration(option)}
+                        </strong>
+
+                        {option.is_recommended && (
+                          <span style={recommendedBadge}>
+                            ⭐ 推荐
+                          </span>
+                        )}
+                      </div>
+
+                      <span style={coatingOptionName}>
+                        {option.option_name}
+                      </span>
+
+                      <strong style={coatingPrice}>
+                        {formatMoney(
+                          Number(option.price || 0)
+                        )}
+                      </strong>
+
+                      {option.product_name && (
+                        <span style={productName}>
+                          药剂：{option.product_name}
+                        </span>
+                      )}
+
+                      {option.description && (
+                        <span style={optionDescription}>
+                          {option.description}
+                        </span>
+                      )}
+
+                      <span
+                        style={{
+                          ...selectionBadge,
+                          color: selected
+                            ? "#6d28d9"
+                            : "#94a3b8",
+                        }}
+                      >
+                        {selected
+                          ? "✓ 已选择 / Selected"
+                          : "点击选择 / Select"}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </section>
           )}
 
@@ -238,32 +389,25 @@ function ItemDetailModal({
           <div style={priceBox}>
             <div>
               <p style={priceLabel}>
-                {isPackage
-                  ? "套餐价格 / Package Price"
-                  : "服务价格 / Service Price"}
+                {selectedCoatingOption
+                  ? "已选镀晶方案价格 / Selected Option Price"
+                  : isPackage
+                    ? "套餐价格 / Package Price"
+                    : "服务价格 / Service Price"}
               </p>
 
-              {showOriginalPrice && (
-                <span style={originalPriceStyle}>
-                  原价 / Original{" "}
-                  {formatMoney(originalPrice)}
-                </span>
-              )}
-
               <strong style={priceStyle}>
-                {formatMoney(price)}
+                {formatMoney(displayedPrice)}
               </strong>
 
-              {savings > 0 && (
-                <span style={savingStyle}>
-                  节省 / Save {formatMoney(savings)}
-                </span>
+              {selectedCoatingOption && (
+                <small style={selectedOptionSummary}>
+                  {formatDuration(selectedCoatingOption)} ·{" "}
+                  {selectedCoatingOption.product_name ||
+                    selectedCoatingOption.option_name}
+                </small>
               )}
             </div>
-
-            <span style={currencyBadge}>
-              显示货币 / Currency: {displayCurrency}
-            </span>
           </div>
 
           <div style={footer}>
@@ -277,7 +421,7 @@ function ItemDetailModal({
 
             <button
               type="button"
-              onClick={onBook}
+              onClick={() => onBook(selectedCoatingOption)}
               style={bookButton}
             >
               📅 立即预约 / Book Now
@@ -287,6 +431,30 @@ function ItemDetailModal({
       </div>
     </div>
   );
+}
+
+function normalizeDurationUnit(
+  value: CoatingOption["duration_unit"]
+): CoatingDurationUnit {
+  return value === "month" ? "month" : "year";
+}
+
+function formatDuration(option: CoatingOption) {
+  const unit = normalizeDurationUnit(
+    option.duration_unit
+  );
+
+  return `${Number(option.duration_years || 0)}${
+    unit === "month" ? "个月" : "年"
+  }`;
+}
+
+function toMonths(option: CoatingOption) {
+  const value = Number(option.duration_years || 0);
+  return normalizeDurationUnit(option.duration_unit) ===
+    "month"
+    ? value
+    : value * 12;
 }
 
 const overlay = {
@@ -303,7 +471,7 @@ const overlay = {
 
 const modal = {
   position: "relative" as const,
-  width: "min(760px, 100%)",
+  width: "min(920px, 100%)",
   maxHeight: "92vh",
   overflowY: "auto" as const,
   borderRadius: 24,
@@ -363,9 +531,7 @@ const typeBadge = {
   fontWeight: 900,
 };
 
-const body = {
-  padding: 26,
-};
+const body = { padding: 26 };
 
 const eyebrow = {
   margin: 0,
@@ -415,6 +581,128 @@ const sectionTitle = {
   fontSize: 17,
 };
 
+const coatingSection = {
+  ...detailSection,
+  border: "1px solid #ddd6fe",
+  background:
+    "linear-gradient(145deg,#faf5ff,#ffffff)",
+};
+
+const coatingHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  flexWrap: "wrap" as const,
+  gap: 12,
+  marginBottom: 15,
+};
+
+const coatingEyebrow = {
+  margin: 0,
+  color: "#7c3aed",
+  fontSize: 9,
+  fontWeight: 900,
+  letterSpacing: "1.2px",
+};
+
+const coatingTitle = {
+  margin: "5px 0 0",
+  color: "#111827",
+  fontSize: 18,
+};
+
+const coatingDescription = {
+  margin: "6px 0 0",
+  color: "#64748b",
+  fontSize: 12,
+  lineHeight: 1.6,
+};
+
+const coatingCountBadge = {
+  padding: "7px 10px",
+  borderRadius: 999,
+  background: "#ede9fe",
+  color: "#6d28d9",
+  fontSize: 11,
+  fontWeight: 900,
+};
+
+const coatingGrid = {
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(auto-fit,minmax(190px,1fr))",
+  gap: 12,
+};
+
+const coatingCard = {
+  minWidth: 0,
+  padding: 15,
+  border: "1px solid #ddd6fe",
+  borderRadius: 16,
+  textAlign: "left" as const,
+  cursor: "pointer",
+  transition: "all .18s ease",
+};
+
+const coatingCardTop = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 8,
+};
+
+const coatingDuration = {
+  color: "#4c1d95",
+  fontSize: 18,
+};
+
+const recommendedBadge = {
+  padding: "4px 7px",
+  borderRadius: 999,
+  background: "#fef3c7",
+  color: "#92400e",
+  fontSize: 9,
+  fontWeight: 900,
+};
+
+const coatingOptionName = {
+  display: "block",
+  marginTop: 10,
+  color: "#334155",
+  fontSize: 13,
+  fontWeight: 800,
+};
+
+const coatingPrice = {
+  display: "block",
+  marginTop: 8,
+  color: "#7c3aed",
+  fontSize: 22,
+};
+
+const productName = {
+  display: "block",
+  marginTop: 8,
+  color: "#475569",
+  fontSize: 11,
+  fontWeight: 700,
+};
+
+const optionDescription = {
+  display: "block",
+  marginTop: 7,
+  color: "#64748b",
+  fontSize: 11,
+  lineHeight: 1.55,
+};
+
+const selectionBadge = {
+  display: "block",
+  marginTop: 12,
+  fontSize: 10,
+  fontWeight: 900,
+};
+
 const includedList = {
   display: "grid",
   gap: 11,
@@ -425,25 +713,6 @@ const includedItem = {
   alignItems: "flex-start",
   gap: 10,
   color: "#334155",
-};
-
-const includedServiceContent = {
-  minWidth: 0,
-  flex: 1,
-};
-
-const includedServiceHeader = {
-  display: "flex",
-  alignItems: "flex-start",
-  justifyContent: "space-between",
-  gap: 12,
-};
-
-const includedServicePrice = {
-  flexShrink: 0,
-  color: "#2563eb",
-  fontSize: 12,
-  fontWeight: 900,
 };
 
 const checkIcon = {
@@ -544,14 +813,6 @@ const priceLabel = {
   fontWeight: 800,
 };
 
-const originalPriceStyle = {
-  display: "block",
-  marginTop: 7,
-  color: "#94a3b8",
-  fontSize: 12,
-  textDecoration: "line-through",
-};
-
 const priceStyle = {
   display: "block",
   marginTop: 5,
@@ -559,23 +820,11 @@ const priceStyle = {
   fontSize: 31,
 };
 
-const savingStyle = {
+const selectedOptionSummary = {
   display: "block",
-  marginTop: 7,
-  color: "#15803d",
+  marginTop: 6,
+  color: "#64748b",
   fontSize: 12,
-  fontWeight: 900,
-};
-
-const currencyBadge = {
-  padding: "7px 10px",
-  border: "1px solid #bfdbfe",
-  borderRadius: 999,
-  background: "#ffffff",
-  color: "#1d4ed8",
-  fontSize: 10,
-  fontWeight: 900,
-  whiteSpace: "nowrap" as const,
 };
 
 const footer = {

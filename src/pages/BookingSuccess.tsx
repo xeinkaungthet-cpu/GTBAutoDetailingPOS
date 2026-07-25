@@ -23,6 +23,13 @@ type BookingSuccessState = {
   vehicleSizeLabel?: string;
   vehicleSizeIcon?: string;
 
+  coatingOptionId?: number;
+  coatingOptionName?: string;
+  coatingDuration?: string;
+  coatingDurationValue?: number;
+  coatingDurationUnit?: "month" | "year" | string;
+  coatingProductName?: string;
+
   appointmentDate?: string;
   appointmentTime?: string;
   customerName?: string;
@@ -133,6 +140,28 @@ function BookingSuccess() {
     vehicleSizePreset?.icon ||
     "🚗";
 
+  const resolvedCoatingDuration =
+    booking.coatingDuration ||
+    formatCoatingDuration(
+      booking.coatingDurationValue,
+      booking.coatingDurationUnit
+    );
+
+  const hasCoatingOption = Boolean(
+    booking.coatingOptionId ||
+      booking.coatingOptionName ||
+      resolvedCoatingDuration ||
+      booking.coatingProductName
+  );
+
+  const resolvedCoatingTitle =
+    [
+      resolvedCoatingDuration,
+      booking.coatingOptionName,
+    ]
+      .filter(Boolean)
+      .join(" · ") || "已选镀晶方案";
+
   async function copyAppointmentNumber() {
     if (!booking.appointmentNo) return;
 
@@ -171,6 +200,15 @@ function BookingSuccess() {
       `车牌：${booking.vehiclePlate || "-"}`,
       resolvedVehicleSizeLabel
         ? `车型大小：${resolvedVehicleSizeLabel}`
+        : "",
+      hasCoatingOption
+        ? `镀晶期限：${resolvedCoatingDuration || "-"}`
+        : "",
+      booking.coatingOptionName
+        ? `镀晶方案：${booking.coatingOptionName}`
+        : "",
+      booking.coatingProductName
+        ? `镀晶药剂：${booking.coatingProductName}`
         : "",
       `车辆型号：${booking.vehicleModel || "-"}`,
       `状态：等待确认`,
@@ -235,6 +273,15 @@ function BookingSuccess() {
           `项目：${booking.serviceName || "-"}`,
           resolvedVehicleSizeLabel
             ? `车型大小：${resolvedVehicleSizeLabel}`
+            : "",
+          hasCoatingOption
+            ? `镀晶期限：${resolvedCoatingDuration || "-"}`
+            : "",
+          booking.coatingOptionName
+            ? `镀晶方案：${booking.coatingOptionName}`
+            : "",
+          booking.coatingProductName
+            ? `镀晶药剂：${booking.coatingProductName}`
             : "",
           `车辆型号：${booking.vehicleModel || "-"}`,
           `价格：${formattedBookingPrice}`,
@@ -393,6 +440,28 @@ function BookingSuccess() {
               </div>
             )}
 
+            {hasCoatingOption && (
+              <div style={coatingPlanBanner}>
+                <span style={coatingPlanIcon}>🛡️</span>
+
+                <span style={coatingPlanContent}>
+                  <small style={coatingPlanLabel}>
+                    镀晶药剂方案 / Coating Option
+                  </small>
+
+                  <strong style={coatingPlanValue}>
+                    {resolvedCoatingTitle}
+                  </strong>
+
+                  {booking.coatingProductName && (
+                    <small style={coatingProductText}>
+                      药剂 / Product：{booking.coatingProductName}
+                    </small>
+                  )}
+                </span>
+              </div>
+            )}
+
             <div style={bookingPriceRow}>
               <span style={bookingTypePill}>
                 {bookingTypeLabel}
@@ -470,6 +539,22 @@ function BookingSuccess() {
               value={resolvedVehicleSizeLabel || "-"}
               icon={resolvedVehicleSizeIcon}
             />
+
+            {hasCoatingOption && (
+              <InformationItem
+                label="镀晶期限"
+                value={resolvedCoatingDuration || "-"}
+                icon="🛡️"
+              />
+            )}
+
+            {booking.coatingProductName && (
+              <InformationItem
+                label="镀晶药剂"
+                value={booking.coatingProductName}
+                icon="🧴"
+              />
+            )}
 
             <InformationItem
               label="车辆型号"
@@ -571,6 +656,21 @@ function formatTime(value?: string) {
   if (!value) return "-";
 
   return value.slice(0, 5);
+}
+
+function formatCoatingDuration(
+  value?: number,
+  unit?: string
+) {
+  const durationValue = Number(value);
+
+  if (!Number.isFinite(durationValue) || durationValue <= 0) {
+    return "";
+  }
+
+  return unit === "month"
+    ? `${durationValue} 个月`
+    : `${durationValue} 年`;
 }
 
 function toCalendarDate(date: Date) {
@@ -857,6 +957,59 @@ const vehicleSizeBannerValue = {
   color: "#0f172a",
   fontSize: 14,
   fontWeight: 850,
+};
+
+const coatingPlanBanner = {
+  display: "flex",
+  alignItems: "flex-start",
+  gap: 12,
+  marginTop: 12,
+  padding: 14,
+  border: "1px solid #ddd6fe",
+  borderRadius: 14,
+  background: "linear-gradient(135deg,#faf5ff,#f5f3ff)",
+};
+
+const coatingPlanIcon = {
+  width: 36,
+  height: 36,
+  flexShrink: 0,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: 11,
+  background: "#ede9fe",
+  fontSize: 18,
+};
+
+const coatingPlanContent = {
+  minWidth: 0,
+  display: "block",
+};
+
+const coatingPlanLabel = {
+  display: "block",
+  color: "#7c3aed",
+  fontSize: 10,
+  fontWeight: 900,
+  letterSpacing: 0.7,
+};
+
+const coatingPlanValue = {
+  display: "block",
+  marginTop: 4,
+  color: "#4c1d95",
+  fontSize: 15,
+  fontWeight: 900,
+  overflowWrap: "anywhere" as const,
+};
+
+const coatingProductText = {
+  display: "block",
+  marginTop: 5,
+  color: "#6d28d9",
+  fontSize: 12,
+  overflowWrap: "anywhere" as const,
 };
 
 const bookingPriceRow = {

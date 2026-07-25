@@ -22,6 +22,13 @@ type AppointmentRecord = Appointment & {
   quoted_currency?: string | null;
   quoted_display_price?: number | string | null;
   quoted_display_currency?: string | null;
+
+  coating_option_id?: number | null;
+  coating_option_name?: string | null;
+  coating_duration_years?: number | string | null;
+  coating_duration_unit?: "month" | "year" | string | null;
+  coating_product_name?: string | null;
+  coating_price?: number | string | null;
 };
 
 const VEHICLE_SIZE_PRESETS: Record<
@@ -185,6 +192,13 @@ function Appointments() {
           appointment.vehicle_size_code
             ?.toLowerCase()
             .includes(keyword) ||
+          appointment.coating_option_name
+            ?.toLowerCase()
+            .includes(keyword) ||
+          appointment.coating_product_name
+            ?.toLowerCase()
+            .includes(keyword) ||
+          getCoatingSearchText(appointment).includes(keyword) ||
           serviceNames.includes(keyword);
 
         const matchesStatus =
@@ -353,7 +367,7 @@ function Appointments() {
           onChange={(event) =>
             setSearch(event.target.value)
           }
-          placeholder="🔍 搜索预约号、客户、电话、车牌、车型或服务"
+          placeholder="🔍 搜索预约号、客户、车牌、车型、服务或镀晶药剂"
           style={searchInput}
         />
 
@@ -430,6 +444,9 @@ function Appointments() {
 
               const vehicleSize =
                 getVehicleSizeInfo(appointment);
+
+              const coatingInfo =
+                getCoatingOptionInfo(appointment);
 
               return (
                 <article
@@ -519,6 +536,41 @@ function Appointments() {
                       SELECTED SERVICE
                     </p>
 
+                    {coatingInfo.hasOption && (
+                      <div style={coatingOptionCard}>
+                        <div style={coatingOptionHeader}>
+                          <span style={coatingOptionIcon}>🛡️</span>
+
+                          <div style={coatingOptionContent}>
+                            <p style={coatingOptionEyebrow}>
+                              COATING PRODUCT OPTION
+                            </p>
+
+                            <strong style={coatingOptionTitle}>
+                              {coatingInfo.title}
+                            </strong>
+
+                            {coatingInfo.productName && (
+                              <span style={coatingProductName}>
+                                药剂 / Product：{coatingInfo.productName}
+                              </span>
+                            )}
+                          </div>
+
+                          {coatingInfo.basePrice !== null && (
+                            <div style={coatingBasePrice}>
+                              <small>方案基础价</small>
+                              <strong>
+                                {formatDisplayMoney(
+                                  coatingInfo.basePrice
+                                )}
+                              </strong>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
                     {selectedServices.length >
                     0 ? (
                       selectedServices.map(
@@ -586,7 +638,10 @@ function Appointments() {
 
                     {hasQuotedPrice && (
                       <p style={quoteMeta}>
-                        已使用客户提交预约时保存的车型报价
+                        已使用客户提交预约时保存的
+                        {coatingInfo.hasOption
+                          ? "车型与镀晶方案最终报价"
+                          : "车型报价"}
                         {appointment.quoted_currency
                           ? ` · 账本货币 ${appointment.quoted_currency}`
                           : ""}
@@ -750,6 +805,116 @@ function getAppointmentServices(
     );
 }
 
+function getCoatingOptionInfo(
+  appointment: AppointmentRecord
+) {
+  const durationValue = toFiniteNumber(
+    appointment.coating_duration_years
+  );
+
+  const normalizedUnit =
+    appointment.coating_duration_unit === "month"
+      ? "month"
+      : appointment.coating_duration_unit === "year"
+        ? "year"
+        : "";
+
+  const savedDuration =
+    durationValue !== null
+      ? formatCoatingDuration(
+          durationValue,
+          normalizedUnit || "year"
+        )
+      : "";
+
+  const notesDuration = extractNoteValue(
+    appointment.notes,
+    "镀晶期限"
+  );
+
+  const duration = savedDuration || notesDuration;
+
+  const optionName =
+    String(
+      appointment.coating_option_name ||
+        extractNoteValue(appointment.notes, "镀晶方案") ||
+        ""
+    ).trim();
+
+  const productName =
+    String(
+      appointment.coating_product_name ||
+        extractNoteValue(appointment.notes, "镀晶药剂") ||
+        ""
+    ).trim();
+
+  const basePrice = toFiniteNumber(
+    appointment.coating_price
+  );
+
+  const hasOption = Boolean(
+    appointment.coating_option_id ||
+      duration ||
+      optionName ||
+      productName
+  );
+
+  return {
+    hasOption,
+    duration,
+    optionName,
+    productName,
+    basePrice,
+    title:
+      [duration, optionName]
+        .filter(Boolean)
+        .join(" · ") || "已选择镀晶方案",
+  };
+}
+
+function getCoatingSearchText(
+  appointment: AppointmentRecord
+) {
+  const coatingInfo =
+    getCoatingOptionInfo(appointment);
+
+  return [
+    coatingInfo.duration,
+    coatingInfo.optionName,
+    coatingInfo.productName,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function formatCoatingDuration(
+  value: number,
+  unit: string
+) {
+  return unit === "month"
+    ? `${value} 个月`
+    : `${value} 年`;
+}
+
+function extractNoteValue(
+  notes: string | null | undefined,
+  label: string
+) {
+  if (!notes) return "";
+
+  const escapedLabel = label.replace(
+    /[.*+?^${}()|[\]\\]/g,
+    "\\$&"
+  );
+
+  const match = notes.match(
+    new RegExp(`${escapedLabel}[：:]\\s*([^\\n\\r]+)`)
+  );
+
+  return match?.[1]?.trim() || "";
+}
+
 function getVehicleSizeInfo(
   appointment: AppointmentRecord
 ) {
@@ -793,13 +958,7 @@ function getVehicleSizeInfo(
 function extractVehicleSizeFromNotes(
   notes?: string | null
 ) {
-  if (!notes) return "";
-
-  const match = notes.match(
-    /车型大小[：:]\s*([^\n\r]+)/
-  );
-
-  return match?.[1]?.trim() || "";
+  return extractNoteValue(notes, "车型大小");
 }
 
 function toFiniteNumber(
@@ -1145,6 +1304,73 @@ const sectionLabel = {
   fontSize: 9,
   fontWeight: 900,
   letterSpacing: 1.1,
+};
+
+const coatingOptionCard = {
+  marginBottom: 14,
+  padding: 14,
+  border: "1px solid #ddd6fe",
+  borderRadius: 14,
+  background: "linear-gradient(135deg,#faf5ff,#f5f3ff)",
+};
+
+const coatingOptionHeader = {
+  display: "flex",
+  alignItems: "flex-start",
+  gap: 11,
+  flexWrap: "wrap" as const,
+};
+
+const coatingOptionIcon = {
+  width: 38,
+  height: 38,
+  flexShrink: 0,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: 11,
+  background: "#ede9fe",
+  fontSize: 18,
+};
+
+const coatingOptionContent = {
+  minWidth: 0,
+  flex: 1,
+};
+
+const coatingOptionEyebrow = {
+  margin: 0,
+  color: "#7c3aed",
+  fontSize: 9,
+  fontWeight: 900,
+  letterSpacing: 0.8,
+};
+
+const coatingOptionTitle = {
+  display: "block",
+  marginTop: 4,
+  color: "#4c1d95",
+  fontSize: 14,
+  fontWeight: 900,
+  overflowWrap: "anywhere" as const,
+};
+
+const coatingProductName = {
+  display: "block",
+  marginTop: 5,
+  color: "#6d28d9",
+  fontSize: 11,
+  overflowWrap: "anywhere" as const,
+};
+
+const coatingBasePrice = {
+  display: "flex",
+  flexDirection: "column" as const,
+  alignItems: "flex-end",
+  gap: 3,
+  marginLeft: "auto",
+  color: "#6d28d9",
+  fontSize: 11,
 };
 
 const serviceRow = {

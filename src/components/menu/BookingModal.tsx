@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import type { Service } from "../../types/database";
 import type { Package } from "../../services/packageService";
 import type { VehicleSizeCode } from "../../services/vehiclePricingService";
+import type { CoatingOption } from "./ItemDetailModal";
 
 import useCurrency from "../../hooks/useCurrency";
 import { supabase } from "../../lib/supabase";
@@ -23,6 +24,9 @@ type Props = {
    */
   quotedPrice?: number;
 
+  /** 客户在服务详情页选择的镀晶药剂期限方案。 */
+  coatingOption?: CoatingOption;
+
   onClose: () => void;
 };
 
@@ -34,6 +38,7 @@ function BookingModal({
   vehicleSizeNameEn,
   vehicleSizeIcon,
   quotedPrice,
+  coatingOption,
   onClose,
 }: Props) {
   const navigate = useNavigate();
@@ -92,10 +97,17 @@ function BookingModal({
 
   const bookingPrice = Number(
     quotedPrice ??
+      coatingOption?.price ??
       packageItem?.package_price ??
       service?.price ??
       0
   );
+
+  const coatingDurationText = coatingOption
+    ? formatCoatingDuration(coatingOption)
+    : "";
+
+  const hasCoatingOption = Boolean(coatingOption);
 
   const vehiclePreset = vehicleSizeCode
     ? VEHICLE_SIZE_PRESETS[vehicleSizeCode]
@@ -222,6 +234,15 @@ function BookingModal({
         hasVehicleSize
           ? `车型大小：${resolvedVehicleSizeLabel}`
           : "",
+        hasCoatingOption
+          ? `镀晶期限：${coatingDurationText}`
+          : "",
+        coatingOption?.option_name
+          ? `镀晶方案：${coatingOption.option_name}`
+          : "",
+        coatingOption?.product_name
+          ? `镀晶药剂：${coatingOption.product_name}`
+          : "",
         `预约价格：${formatMoney(bookingPrice)}`,
         `显示货币：${displayCurrency}`,
         `账本货币：${accountingCurrency}`,
@@ -267,6 +288,21 @@ function BookingModal({
             quoted_display_price: quotedDisplayPrice,
             quoted_display_currency: displayCurrency,
 
+            coating_option_id: coatingOption?.id ?? null,
+            coating_option_name:
+              coatingOption?.option_name ?? null,
+            coating_duration_years:
+              coatingOption?.duration_years ?? null,
+            coating_duration_unit:
+              normalizeCoatingDurationUnit(
+                coatingOption?.duration_unit
+              ),
+            coating_product_name:
+              coatingOption?.product_name ?? null,
+            coating_price: coatingOption
+              ? Number(coatingOption.price || 0)
+              : null,
+
             service_ids: serviceIds,
 
             appointment_date: appointmentDate,
@@ -302,6 +338,16 @@ function BookingModal({
           vehicleSizeNameEn: resolvedVehicleSizeNameEn,
           vehicleSizeLabel: resolvedVehicleSizeLabel,
           vehicleSizeIcon: resolvedVehicleSizeIcon,
+
+          coatingOptionId: coatingOption?.id,
+          coatingOptionName: coatingOption?.option_name,
+          coatingDuration: coatingDurationText,
+          coatingDurationValue:
+            coatingOption?.duration_years,
+          coatingDurationUnit:
+            coatingOption?.duration_unit,
+          coatingProductName:
+            coatingOption?.product_name,
 
           appointmentDate,
           appointmentTime,
@@ -382,6 +428,30 @@ function BookingModal({
           </div>
         )}
 
+        {hasCoatingOption && coatingOption && (
+          <div style={coatingOptionSummary}>
+            <span style={coatingOptionSummaryIcon}>
+              🛡️
+            </span>
+
+            <span style={coatingOptionSummaryContent}>
+              <small style={coatingOptionSummaryEyebrow}>
+                已选镀晶药剂 / Selected Coating Option
+              </small>
+
+              <strong style={coatingOptionSummaryName}>
+                {coatingDurationText} · {coatingOption.option_name}
+              </strong>
+
+              {coatingOption.product_name && (
+                <small style={coatingOptionProductName}>
+                  药剂：{coatingOption.product_name}
+                </small>
+              )}
+            </span>
+          </div>
+        )}
+
         <div style={serviceSummary}>
           {bookingImage ? (
             <img
@@ -418,6 +488,12 @@ function BookingModal({
                   {resolvedVehicleSizeIcon}{" "}
                   {resolvedVehicleSizeName ||
                     resolvedVehicleSizeNameEn}
+                </span>
+              )}
+
+              {hasCoatingOption && (
+                <span style={coatingInlineBadge}>
+                  🛡️ {coatingDurationText}
                 </span>
               )}
             </div>
@@ -692,6 +768,26 @@ const VEHICLE_SIZE_PRESETS: Record<
   },
 };
 
+function normalizeCoatingDurationUnit(
+  value: CoatingOption["duration_unit"] | undefined
+): "month" | "year" | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  return value === "month" ? "month" : "year";
+}
+
+function formatCoatingDuration(option: CoatingOption) {
+  const unit = normalizeCoatingDurationUnit(
+    option.duration_unit
+  );
+
+  return `${Number(option.duration_years || 0)}${
+    unit === "month" ? "个月" : "年"
+  }`;
+}
+
 function getTodayDate() {
   const now = new Date();
 
@@ -846,6 +942,52 @@ const vehicleSizeSummaryName = {
   fontSize: 14,
 };
 
+const coatingOptionSummary = {
+  display: "flex",
+  alignItems: "center",
+  gap: 13,
+  marginTop: 14,
+  marginBottom: 14,
+  padding: 14,
+  borderRadius: 15,
+  border: "1px solid #ddd6fe",
+  background:
+    "linear-gradient(145deg,#faf5ff,#f5f3ff)",
+};
+
+const coatingOptionSummaryIcon = {
+  display: "grid",
+  placeItems: "center",
+  width: 44,
+  height: 44,
+  flexShrink: 0,
+  borderRadius: 13,
+  background: "#ede9fe",
+  fontSize: 22,
+};
+
+const coatingOptionSummaryContent = {
+  display: "grid",
+  gap: 3,
+};
+
+const coatingOptionSummaryEyebrow = {
+  color: "#7c3aed",
+  fontSize: 9,
+  fontWeight: 900,
+  letterSpacing: ".08em",
+};
+
+const coatingOptionSummaryName = {
+  color: "#3b0764",
+  fontSize: 14,
+};
+
+const coatingOptionProductName = {
+  color: "#64748b",
+  fontSize: 11,
+};
+
 const serviceSummary = {
   display: "flex",
   alignItems: "center",
@@ -926,6 +1068,17 @@ const vehicleSizeInlineBadge = {
   color: "#1d4ed8",
 
   fontSize: 11,
+  fontWeight: 800,
+};
+
+const coatingInlineBadge = {
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "4px 7px",
+  borderRadius: 999,
+  background: "#f3e8ff",
+  color: "#7e22ce",
+  fontSize: 10,
   fontWeight: 800,
 };
 
