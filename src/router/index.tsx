@@ -24,7 +24,7 @@ import Employees from "../pages/Employees";
 import Settings from "../pages/Settings";
 import Appointments from "../pages/Appointments";
 import Inspection from "../pages/Inspection";
-
+import DailyCashClosing from "../pages/DailyCashClosing";
 import CustomerMenu from "../pages/CustomerMenu";
 import BookingSuccess from "../pages/BookingSuccess";
 import CustomerQR from "../pages/CustomerQR";
@@ -176,7 +176,14 @@ function AppRouter() {
           </ProtectedPage>
         }
       />
-
+<Route
+  path="/daily-cash-closing"
+  element={
+    <ProtectedPage permission="reports">
+      <DailyCashClosing />
+    </ProtectedPage>
+  }
+/>
       <Route
         path="/orders"
         element={

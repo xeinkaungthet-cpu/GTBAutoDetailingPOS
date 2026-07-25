@@ -111,6 +111,12 @@ const menuItems = [
     permission: "reports",
   },
   {
+  to: "/daily-cash-closing",
+  label: "每日现金关账",
+  icon: "💵",
+  permission: "reports",
+},
+  {
   to: "/expenses",
   label: "费用管理",
   icon: "💸",
