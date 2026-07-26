@@ -606,11 +606,34 @@ function POS() {
         console.warn("订单已完成，但读取订单详情失败：", orderReadError);
       }
 
+      const originalOrderNo =
+        savedOrder?.order_no ??
+        checkoutResult.order_no ??
+        `GTB1N-${orderId}`;
+
+      const brandedOrderNo = normalizeGtb1nOrderNumber(
+        originalOrderNo,
+        orderId,
+      );
+
+      if (brandedOrderNo !== originalOrderNo) {
+        const { error: orderNumberUpdateError } = await supabase
+          .from("orders")
+          .update({ order_no: brandedOrderNo })
+          .eq("id", orderId);
+
+        if (orderNumberUpdateError) {
+          console.warn(
+            "订单已完成，但更新 GTB1N 订单编号失败：",
+            orderNumberUpdateError,
+          );
+        }
+      }
+
       const completedOrderData = {
         ...(savedOrder ?? {}),
         id: orderId,
-        order_no:
-          savedOrder?.order_no ?? checkoutResult.order_no ?? `GTB1N-${orderId}`,
+        order_no: brandedOrderNo,
         members: selectedMember,
         vehicles: selectedVehicle,
         subtotal: savedOrder?.subtotal ?? subtotal,
@@ -1214,6 +1237,27 @@ function normalizeCheckoutResult(data: unknown): CheckoutRpcResult {
     change_amount: toOptionalNumber(record.change_amount),
     points_earned: toOptionalNumber(record.points_earned),
   };
+}
+
+function normalizeGtb1nOrderNumber(
+  value: unknown,
+  orderId: number,
+): string {
+  const orderNumber = String(value ?? "").trim();
+
+  if (!orderNumber) {
+    return `GTB1N-${orderId}`;
+  }
+
+  if (/^GTB1N-/i.test(orderNumber)) {
+    return orderNumber;
+  }
+
+  if (/^GTB-/i.test(orderNumber)) {
+    return orderNumber.replace(/^GTB-/i, "GTB1N-");
+  }
+
+  return orderNumber;
 }
 
 function toOptionalNumber(value: unknown): number | undefined {
