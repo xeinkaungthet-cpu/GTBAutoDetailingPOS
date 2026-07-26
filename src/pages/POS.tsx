@@ -610,7 +610,7 @@ function POS() {
         ...(savedOrder ?? {}),
         id: orderId,
         order_no:
-          savedOrder?.order_no ?? checkoutResult.order_no ?? `GTB-${orderId}`,
+          savedOrder?.order_no ?? checkoutResult.order_no ?? `GTB1N-${orderId}`,
         members: selectedMember,
         vehicles: selectedVehicle,
         subtotal: savedOrder?.subtotal ?? subtotal,

@@ -228,7 +228,7 @@ function OrderDetailDrawer({
 <head>
   <meta charset="utf-8" />
   <title>${escapeReceiptHtml(
-    order.order_no || "GTB Receipt",
+    order.order_no || "GTB1N Receipt",
   )}</title>
   <style>
     * { box-sizing: border-box; }
@@ -281,7 +281,7 @@ function OrderDetailDrawer({
   <main class="receipt">
     <header class="brand">
       <small>PAYMENT RECEIPT</small>
-      <h1>GTB Auto Detailing &amp; Window Film</h1>
+      <h1>GTB1N Auto Detailing &amp; Window Film</h1>
       <p>专业汽车美容与洗车服务</p>
     </header>
     <div class="content">
@@ -335,7 +335,7 @@ function OrderDetailDrawer({
         accountingCurrency,
       )}</p>
     </div>
-    <footer class="footer">感谢选择 GTB Auto Detailing &amp; Window Film · Thank you for choosing us!</footer>
+    <footer class="footer">感谢选择 GTB1N Auto Detailing &amp; Window Film · Thank you for choosing us!</footer>
   </main>
   <script>window.addEventListener('load', function () { setTimeout(function () { window.print(); }, 250); });<\/script>
 </body>
