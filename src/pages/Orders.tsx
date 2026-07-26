@@ -320,7 +320,7 @@ async function handleRefundSuccess() {
     <div>
       <div style={pageHeader}>
         <div>
-          <p style={eyebrow}>GTB Auto Detailing & Window Film</p>
+          <p style={eyebrow}>GTB1N Auto Detailing & Window Film</p>
 
           <h1 style={pageTitle}>
             订单记录 / Order Management

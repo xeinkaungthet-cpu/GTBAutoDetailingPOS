@@ -4,7 +4,7 @@ import {
 } from "react";
 
 import heroImage from "../../assets/hero.png";
-import gtbLogo from "../../assets/gtb-logo.jpg";
+import gtbLogo from "../../assets/gtb1n-logo.png";
 import { supabase } from "../../lib/supabase";
 
 type PublicBusinessProfile = {
@@ -21,7 +21,7 @@ type PublicBusinessProfile = {
 };
 
 const defaultProfile: PublicBusinessProfile = {
-  store_name: "GTB Auto Detailing & Window Film",
+  store_name: "GTB1N Auto Detailing & Window Film",
   store_subtitle:
     "Professional Auto Detailing & Car Wash",
   logo_url: "",

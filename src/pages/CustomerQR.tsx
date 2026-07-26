@@ -71,7 +71,7 @@ function CustomerQR() {
           style={qrCard}
         >
           <div style={brand}>
-            GTB Auto Detailing & Window Film
+            GTB1N Auto Detailing & Window Film
           </div>
 
           <p style={subtitle}>

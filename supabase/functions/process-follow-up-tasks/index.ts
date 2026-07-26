@@ -20,9 +20,9 @@ type Member = {
   email: string | null;
 };
 
-const BRAND_NAME = "GTB Auto Detailing & Window Film";
+const BRAND_NAME = "GTB1N Auto Detailing & Window Film";
 const EMAIL_FROM =
-  "GTB Auto Detailing & Window Film <onboarding@resend.dev>";
+  "GTB1N Auto Detailing & Window Film <onboarding@resend.dev>";
 
 function escapeHtml(value: string): string {
   return value

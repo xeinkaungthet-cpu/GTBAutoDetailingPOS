@@ -747,7 +747,7 @@ function buildReceiptHtml(
       0 0 14px rgba(245, 158, 11, 0.55);
   "
 >
-  GTB Auto Detailing & Window Film
+  GTB1N Auto Detailing & Window Film
 </h1>
 
               <div
@@ -1121,7 +1121,7 @@ function buildReceiptHtml(
                   text-align: center;
                 "
               >
-                感谢选择 GTB Auto Detailing & Window Film。
+                感谢选择 GTB1N Auto Detailing & Window Film。
                 <br />
                 Thank you for choosing us!
               </div>
@@ -1137,7 +1137,7 @@ function buildReceiptHtml(
                 text-align: center;
               "
             >
-              此邮件由 GTB Auto Detailing & Window Film POS
+              此邮件由 GTB1N Auto Detailing & Window Film POS
               自动发送。
               <br />
               This receipt was generated
@@ -1255,7 +1255,7 @@ Deno.serve(async (request) => {
 
         body: JSON.stringify({
           from:
-            "GTB Auto Detailing & Window Film <onboarding@resend.dev>",
+            "GTB1N Auto Detailing & Window Film <onboarding@resend.dev>",
 
           to: [
             payload.to.trim(),

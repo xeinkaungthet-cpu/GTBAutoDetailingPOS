@@ -1721,7 +1721,7 @@ function Expenses() {
           报表日期：{appliedFilters.startDate} 至 {appliedFilters.endDate}
         </span>
         <span>最终净利润 = 真实毛利润 − 已付款营业费用</span>
-        <span>GTB Auto Detailing & Window Film POS</span>
+        <span>GTB1N Auto Detailing & Window Film POS</span>
       </footer>
     </main>
   );

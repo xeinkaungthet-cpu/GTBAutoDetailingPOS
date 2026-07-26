@@ -385,7 +385,7 @@ function BookingModal({
         <div style={header}>
           <div>
             <p style={eyebrow}>
-              GTB Auto Detailing & Window Film
+              GTB1N Auto Detailing & Window Film
             </p>
 
             <h2 style={title}>

@@ -2184,7 +2184,7 @@ function Reports() {
         </span>
 
         <span>
-          GTB Auto Detailing & Window Film POS
+          GTB1N Auto Detailing & Window Film POS
         </span>
       </footer>
     </main>

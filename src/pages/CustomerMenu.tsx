@@ -44,10 +44,10 @@ type PublicBusinessProfile = {
 };
 
 const defaultBusinessProfile: PublicBusinessProfile = {
-  store_name: "GTB Auto Detailing & Window Film",
+  store_name: "GTB1N Auto Detailing & Window Film",
   store_subtitle:
     "Professional Auto Detailing & Car Wash",
-  logo_url: "",
+  logo_url: "/gtb1n-logo.png",
   phone: "09443751188",
   wechat: "",
   telegram: "",

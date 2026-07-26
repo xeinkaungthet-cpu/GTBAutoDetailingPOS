@@ -777,7 +777,7 @@ function DailyCashClosing() {
           </section>
 
           <section className="cash-closing-print-receipt print-only">
-            <h1>GTB Auto Detailing & Window Film</h1>
+            <h1>GTB1N Auto Detailing & Window Film</h1>
             <h2>每日现金关账单 / Daily Cash Closing</h2>
             <p>日期：{selectedDate}</p>
             <p>关账编号：{existingClosing?.closing_no ?? "尚未保存"}</p>

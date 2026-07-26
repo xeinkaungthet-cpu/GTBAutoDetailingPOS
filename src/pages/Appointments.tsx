@@ -287,7 +287,7 @@ function Appointments() {
       <div style={pageHeader}>
         <div>
           <p style={eyebrow}>
-            GTB Auto Detailing & Window Film
+            GTB1N Auto Detailing & Window Film
           </p>
 
           <h1 style={pageTitle}>

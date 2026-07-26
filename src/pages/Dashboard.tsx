@@ -311,7 +311,7 @@ function Dashboard() {
               marginTop: 6,
             }}
           >
-            GTB Auto Detailing & Window Film POS 营业总览
+            GTB1N Auto Detailing & Window Film POS 营业总览
           </p>
         </div>
 
