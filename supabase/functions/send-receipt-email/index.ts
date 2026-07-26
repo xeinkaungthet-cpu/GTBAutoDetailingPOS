@@ -1262,7 +1262,7 @@ Deno.serve(async (request) => {
           ],
 
           subject:
-            `GTB 收据 / Receipt ${payload.order.orderNo} (${currencySettings.displayCurrency})`,
+            `GTB1N 收据 / Receipt ${payload.order.orderNo} (${currencySettings.displayCurrency})`,
 
           html:
             buildReceiptHtml(
