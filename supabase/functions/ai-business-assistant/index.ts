@@ -187,6 +187,381 @@ function roundMoney(value: number | null): number | null {
   return Math.round(value * 100) / 100;
 }
 
+function expenseAmount(row: JsonRecord): number {
+  const direct = firstValue(row, [
+    "total_amount",
+    "amount",
+    "expense_amount",
+    "total",
+  ]);
+
+  if (direct !== null) {
+    return toNumber(direct);
+  }
+
+  return (
+    firstNumber(row, ["subtotal"]) +
+    firstNumber(row, ["tax_amount", "tax"])
+  );
+}
+
+function sumExpenses(rows: JsonRecord[]): number {
+  return rows.reduce((sum, row) => sum + expenseAmount(row), 0);
+}
+
+function isPaidExpense(row: JsonRecord): boolean {
+  const status = firstText(row, ["status"]).toLowerCase();
+  const paymentStatus = firstText(row, ["payment_status"]).toLowerCase();
+
+  if (["cancelled", "rejected", "void"].includes(status)) {
+    return false;
+  }
+
+  if (["cancelled", "rejected", "void", "pending", "unpaid"].includes(paymentStatus)) {
+    return false;
+  }
+
+  return paymentStatus === "" || ["paid", "completed"].includes(paymentStatus);
+}
+
+function isPendingExpense(row: JsonRecord): boolean {
+  const status = firstText(row, ["status"]).toLowerCase();
+  const paymentStatus = firstText(row, ["payment_status"]).toLowerCase();
+
+  return (
+    !["cancelled", "rejected", "void"].includes(status) &&
+    ["pending", "unpaid"].includes(paymentStatus)
+  );
+}
+
+function moneyText(value: unknown, currency: string): string {
+  return `${currency} ${toNumber(value).toLocaleString("en-US", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function buildCashClosingSnapshot(
+  rows: JsonRecord[],
+  todayKey: string,
+  monthKey: string,
+) {
+  const validRows = rows
+    .filter((row) => Boolean(firstText(row, ["closing_date"])))
+    .sort((a, b) =>
+      firstText(b, ["closing_date"]).localeCompare(
+        firstText(a, ["closing_date"]),
+      ),
+    );
+
+  const todayClosing = validRows.find(
+    (row) => firstText(row, ["closing_date"]) === todayKey,
+  );
+  const latestClosing = validRows[0];
+  const monthClosings = validRows.filter((row) =>
+    firstText(row, ["closing_date"]).startsWith(monthKey),
+  );
+
+  const monthDifferenceTotal = monthClosings.reduce(
+    (sum, row) => sum + firstNumber(row, ["difference"]),
+    0,
+  );
+  const unbalancedCount = monthClosings.filter(
+    (row) => Math.abs(firstNumber(row, ["difference"])) > 0.01,
+  ).length;
+
+  return {
+    todayStatus: todayClosing
+      ? firstText(todayClosing, ["status"]) || "closed"
+      : "open",
+    todayExpectedCash: roundMoney(
+      todayClosing ? firstNumber(todayClosing, ["expected_cash"]) : 0,
+    ),
+    todayActualCash: roundMoney(
+      todayClosing ? firstNumber(todayClosing, ["actual_cash"]) : 0,
+    ),
+    todayDifference: roundMoney(
+      todayClosing ? firstNumber(todayClosing, ["difference"]) : 0,
+    ),
+    latestClosingDate: latestClosing
+      ? firstText(latestClosing, ["closing_date"])
+      : null,
+    latestStatus: latestClosing
+      ? firstText(latestClosing, ["status"]) || "closed"
+      : null,
+    latestDifference: roundMoney(
+      latestClosing ? firstNumber(latestClosing, ["difference"]) : 0,
+    ),
+    monthClosingCount: monthClosings.length,
+    monthDifferenceTotal: roundMoney(monthDifferenceTotal),
+    unbalancedCount,
+  };
+}
+
+function buildRuleBasedAnalysis(
+  snapshot: JsonRecord,
+  question: string,
+  language: "zh-CN" | "en",
+): AssistantStructuredOutput {
+  const today = (snapshot.today ?? {}) as JsonRecord;
+  const month = (snapshot.month ?? {}) as JsonRecord;
+  const appointments = (snapshot.appointments ?? {}) as JsonRecord;
+  const inventory = (snapshot.inventory ?? {}) as JsonRecord;
+  const cashClosing = (snapshot.cashClosing ?? {}) as JsonRecord;
+  const currency = firstText(snapshot, ["accountingCurrency"]) || "USD";
+
+  const todayRevenue = firstNumber(today, ["revenue"]);
+  const todayRefunds = firstNumber(today, ["refundAmount"]);
+  const todayExpenses = firstNumber(today, ["expenseAmount"]);
+  const todayNet = todayRevenue - todayRefunds - todayExpenses;
+  const monthRevenue = firstNumber(month, ["revenue"]);
+  const monthRefunds = firstNumber(month, ["refundAmount"]);
+  const monthExpenses = firstNumber(month, ["expenseAmount"]);
+  const monthNetCash = firstNumber(month, ["netCashAfterRefundsAndExpenses"]);
+  const grossProfitValue = firstValue(month, ["grossProfit"]);
+  const netProfitValue = firstValue(month, ["netProfit"]);
+  const lowStockCount = firstNumber(inventory, ["lowStockCount"]);
+  const pendingAppointments = firstNumber(appointments, ["pendingCount"]);
+  const todayClosingStatus = firstText(cashClosing, ["todayStatus"]) || "open";
+  const todayDifference = firstNumber(cashClosing, ["todayDifference"]);
+  const unbalancedCount = firstNumber(cashClosing, ["unbalancedCount"]);
+  const pendingExpenseCount = firstNumber(month, ["pendingExpenseCount"]);
+  const pendingExpenseAmount = firstNumber(month, ["pendingExpenseAmount"]);
+  const topItems = Array.isArray(snapshot.topItemsThisMonth)
+    ? (snapshot.topItemsThisMonth as JsonRecord[])
+    : [];
+  const warnings = Array.isArray(snapshot.dataWarnings)
+    ? (snapshot.dataWarnings as unknown[]).map(String)
+    : [];
+
+  const actions: ProposedAction[] = [];
+
+  if (todayClosingStatus === "open" || Math.abs(todayDifference) > 0.01) {
+    actions.push({
+      action_type: "review_cash_flow",
+      target_type: "finance",
+      target_id: `cash-closing-${firstText(today, ["date"]) || "today"}`,
+      title:
+        todayClosingStatus === "open"
+          ? "完成今天的现金关账"
+          : "复核现金关账差额",
+      description:
+        todayClosingStatus === "open"
+          ? "今天尚未找到已保存的现金关账记录。"
+          : `今天现金差额为 ${moneyText(todayDifference, currency)}。`,
+      risk_level: Math.abs(todayDifference) > 0.01 ? "high" : "medium",
+      payload: {
+        metric_name: "cash_closing_difference",
+        metric_value: todayDifference,
+        related_count: 1,
+        reference_period: firstText(today, ["date"]) || "today",
+        recommended_next_step:
+          "核对现金销售、现金退款、现金费用、备用金与实际清点金额。",
+      },
+    });
+  }
+
+  if (lowStockCount > 0) {
+    actions.push({
+      action_type: "review_low_stock",
+      target_type: "inventory",
+      target_id: "low-stock-products",
+      title: `处理 ${Math.round(lowStockCount)} 个低库存产品`,
+      description: "库存已达到或低于最低库存线，可能影响施工或产品销售。",
+      risk_level: lowStockCount >= 3 ? "high" : "medium",
+      payload: {
+        metric_name: "low_stock_count",
+        metric_value: lowStockCount,
+        related_count: Math.round(lowStockCount),
+        reference_period: "current",
+        recommended_next_step: "打开产品库存，确认补货数量与采购优先级。",
+      },
+    });
+  }
+
+  if (pendingAppointments > 0) {
+    actions.push({
+      action_type: "review_pending_appointments",
+      target_type: "appointments",
+      target_id: "pending-appointments",
+      title: `确认 ${Math.round(pendingAppointments)} 个待处理预约`,
+      description: "待确认预约需要尽快联系客户，避免流失。",
+      risk_level: pendingAppointments >= 5 ? "high" : "medium",
+      payload: {
+        metric_name: "pending_appointment_count",
+        metric_value: pendingAppointments,
+        related_count: Math.round(pendingAppointments),
+        reference_period: "current",
+        recommended_next_step: "打开预约管理，确认日期、时间、车型和服务项目。",
+      },
+    });
+  }
+
+  if (monthNetCash < 0 || (netProfitValue !== null && toNumber(netProfitValue) < 0)) {
+    actions.push({
+      action_type: "review_profitability",
+      target_type: "finance",
+      target_id: `profitability-${firstText(month, ["month"]) || "month"}`,
+      title: "检查本月现金流与利润",
+      description: `本月净现金为 ${moneyText(monthNetCash, currency)}。`,
+      risk_level: "high",
+      payload: {
+        metric_name: "month_net_cash",
+        metric_value: monthNetCash,
+        related_count: 1,
+        reference_period: firstText(month, ["month"]) || "current_month",
+        recommended_next_step: "检查退款、费用、低毛利项目及未录入成本。",
+      },
+    });
+  }
+
+  if (warnings.length > 0) {
+    actions.push({
+      action_type: "review_data_quality",
+      target_type: "system",
+      target_id: "data-warning",
+      title: "检查经营数据读取警告",
+      description: warnings.slice(0, 3).join("；"),
+      risk_level: "medium",
+      payload: {
+        metric_name: "data_warning_count",
+        metric_value: warnings.length,
+        related_count: warnings.length,
+        reference_period: "current_request",
+        recommended_next_step: "检查相关数据库表、字段和权限设置。",
+      },
+    });
+  }
+
+  const selectedActions = actions
+    .sort((a, b) => {
+      const weight = { high: 3, medium: 2, low: 1 };
+      return weight[b.risk_level] - weight[a.risk_level];
+    })
+    .slice(0, 3);
+
+  const topItemText = topItems.length
+    ? topItems
+        .slice(0, 3)
+        .map((item, index) =>
+          `${index + 1}. ${firstText(item, ["name"]) || "未命名项目"}（数量 ${firstNumber(item, ["quantity"]) || 0}，收入 ${moneyText(firstNumber(item, ["revenue"]), currency)}）`,
+        )
+        .join("\n")
+    : "暂无足够的本月热销项目数据。";
+
+  if (language === "en") {
+    return {
+      answer: [
+        "Local fallback analysis is active because the external AI service is unavailable.",
+        "",
+        `Question: ${question}`,
+        "",
+        "Today",
+        `Revenue: ${moneyText(todayRevenue, currency)}`,
+        `Refunds: ${moneyText(todayRefunds, currency)}`,
+        `Paid expenses: ${moneyText(todayExpenses, currency)}`,
+        `Net cash movement: ${moneyText(todayNet, currency)}`,
+        "",
+        "This month",
+        `Revenue: ${moneyText(monthRevenue, currency)}`,
+        `Refunds: ${moneyText(monthRefunds, currency)}`,
+        `Paid expenses: ${moneyText(monthExpenses, currency)}`,
+        `Net cash: ${moneyText(monthNetCash, currency)}`,
+        grossProfitValue === null
+          ? "Gross profit: unavailable"
+          : `Gross profit: ${moneyText(grossProfitValue, currency)}`,
+        netProfitValue === null
+          ? "Net profit: unavailable"
+          : `Net profit: ${moneyText(netProfitValue, currency)}`,
+        "",
+        `Pending appointments: ${Math.round(pendingAppointments)}`,
+        `Low-stock products: ${Math.round(lowStockCount)}`,
+        `Pending expenses: ${Math.round(pendingExpenseCount)} / ${moneyText(pendingExpenseAmount, currency)}`,
+        `Cash closing status today: ${todayClosingStatus}; difference ${moneyText(todayDifference, currency)}`,
+        `Unbalanced closings this month: ${Math.round(unbalancedCount)}`,
+      ].join("\n"),
+      actions: selectedActions,
+    };
+  }
+
+  const actionLines = selectedActions.length
+    ? selectedActions
+        .map(
+          (action, index) =>
+            `${index + 1}. ${action.title}：${action.payload.recommended_next_step}`,
+        )
+        .join("\n")
+    : "1. 当前没有发现必须立即处理的高风险事项，继续保持每日记账与关账。";
+
+  return {
+    answer: [
+      "当前已自动切换到本地智能分析模式。即使 OpenAI API 额度暂时不可用，系统仍会根据数据库实时数据给出经营总结。",
+      "",
+      `你的问题：${question}`,
+      "",
+      "【今日经营】",
+      `营业额：${moneyText(todayRevenue, currency)}（${Math.round(firstNumber(today, ["orderCount"]))} 笔订单）`,
+      `退款：${moneyText(todayRefunds, currency)}（${Math.round(firstNumber(today, ["refundCount"]))} 笔）`,
+      `已付费用：${moneyText(todayExpenses, currency)}（${Math.round(firstNumber(today, ["expenseCount"]))} 笔）`,
+      `今日净现金变动：${moneyText(todayNet, currency)}`,
+      "",
+      "【本月经营】",
+      `营业额：${moneyText(monthRevenue, currency)}`,
+      `退款：${moneyText(monthRefunds, currency)}`,
+      `已付费用：${moneyText(monthExpenses, currency)}`,
+      `净现金：${moneyText(monthNetCash, currency)}`,
+      grossProfitValue === null
+        ? "毛利润：利润流水暂时没有可用数据"
+        : `毛利润：${moneyText(grossProfitValue, currency)}`,
+      netProfitValue === null
+        ? "最终净利润：暂时没有可用数据"
+        : `最终净利润：${moneyText(netProfitValue, currency)}`,
+      `待付款费用：${Math.round(pendingExpenseCount)} 笔，共 ${moneyText(pendingExpenseAmount, currency)}`,
+      "",
+      "【运营检查】",
+      `待确认预约：${Math.round(pendingAppointments)} 个`,
+      `低库存产品：${Math.round(lowStockCount)} 个`,
+      `今日现金关账：${todayClosingStatus === "open" ? "尚未关账" : "已保存"}，差额 ${moneyText(todayDifference, currency)}`,
+      `本月存在差额的关账：${Math.round(unbalancedCount)} 天`,
+      "",
+      "【本月热销项目】",
+      topItemText,
+      "",
+      "【最优先行动】",
+      actionLines,
+    ].join("\n"),
+    actions: selectedActions,
+  };
+}
+
+function getOpenAIErrorMessage(payload: JsonRecord): string {
+  const errorRecord =
+    payload.error && typeof payload.error === "object"
+      ? (payload.error as JsonRecord)
+      : {};
+  const message =
+    firstText(errorRecord, ["message"]) || "OpenAI 请求失败";
+  const code = firstText(errorRecord, ["code", "type"]).toLowerCase();
+  const normalizedMessage = message.toLowerCase();
+
+  if (
+    code.includes("insufficient_quota") ||
+    normalizedMessage.includes("exceeded your current quota") ||
+    normalizedMessage.includes("billing quota")
+  ) {
+    return "OpenAI API 额度已用完或尚未启用 API 计费，已自动切换到本地智能分析。";
+  }
+
+  if (
+    code.includes("rate_limit") ||
+    normalizedMessage.includes("rate limit")
+  ) {
+    return "OpenAI API 当前请求过于频繁，已自动切换到本地智能分析。";
+  }
+
+  return `${message}；已自动切换到本地智能分析。`;
+}
+
 function extractOpenAIText(payload: JsonRecord): string {
   if (typeof payload.output_text === "string") {
     return payload.output_text.trim();
@@ -558,16 +933,6 @@ export default {
     const language = requestBody.language === "en" ? "en" : "zh-CN";
     const openAIKey = Deno.env.get("OPENAI_API_KEY");
 
-    if (!openAIKey) {
-      return jsonResponse(
-        {
-          error:
-            "服务器尚未设置 OPENAI_API_KEY，请先在 Supabase Secrets 中添加。",
-        },
-        500,
-      );
-    }
-
     const model = Deno.env.get("OPENAI_MODEL") || "gpt-5-mini";
     const timeZone = Deno.env.get("BUSINESS_TIME_ZONE") || "Asia/Yangon";
 
@@ -580,6 +945,7 @@ export default {
       appointmentsResult,
       profitLedgerResult,
       settingsResult,
+      dailyCashClosingsResult,
     ] = await Promise.all([
       safeReadAll(ctx.supabaseAdmin, "orders"),
       safeReadAll(ctx.supabaseAdmin, "order_items"),
@@ -589,6 +955,7 @@ export default {
       safeReadAll(ctx.supabaseAdmin, "appointments"),
       safeReadAll(ctx.supabaseAdmin, "report_profit_ledger"),
       safeReadAll(ctx.supabaseAdmin, "business_settings", 10),
+      safeReadAll(ctx.supabaseAdmin, "daily_cash_closings", 500),
     ]);
 
     const warnings = [
@@ -600,6 +967,7 @@ export default {
       appointmentsResult.warning,
       profitLedgerResult.warning,
       settingsResult.warning,
+      dailyCashClosingsResult.warning,
     ].filter((warning): warning is string => Boolean(warning));
 
     const now = new Date();
@@ -632,14 +1000,27 @@ export default {
       )
     );
 
-    const countableExpenses = expensesResult.rows.filter(isCountableExpense);
+    const paidExpenses = expensesResult.rows.filter(isPaidExpense);
+    const pendingExpenses = expensesResult.rows.filter(isPendingExpense);
 
-    const todayExpenses = countableExpenses.filter(
+    const todayExpenses = paidExpenses.filter(
       (row) =>
-        rowDateKey(row, ["expense_date", "created_at"], timeZone) === todayKey,
+        rowDateKey(
+          row,
+          ["paid_date", "expense_date", "created_at"],
+          timeZone,
+        ) === todayKey,
     );
 
-    const monthExpenses = countableExpenses.filter((row) =>
+    const monthExpenses = paidExpenses.filter((row) =>
+      rowDateKey(
+        row,
+        ["paid_date", "expense_date", "created_at"],
+        timeZone,
+      ).startsWith(monthKey)
+    );
+
+    const monthPendingExpenses = pendingExpenses.filter((row) =>
       rowDateKey(row, ["expense_date", "created_at"], timeZone).startsWith(
         monthKey,
       )
@@ -659,7 +1040,13 @@ export default {
     const monthLedger = profitLedgerResult.rows.filter((row) =>
       rowDateKey(
         row,
-        ["transaction_date", "entry_date", "date", "created_at"],
+        [
+          "transaction_at",
+          "transaction_date",
+          "entry_date",
+          "date",
+          "created_at",
+        ],
         timeZone,
       ).startsWith(monthKey)
     );
@@ -676,27 +1063,33 @@ export default {
       "total",
     ]);
 
-    const monthExpenseAmount = sumRows(monthExpenses, [
-      "amount",
-      "expense_amount",
-      "total",
-    ]);
+    const monthExpenseAmount = sumExpenses(monthExpenses);
+    const monthPendingExpenseAmount = sumExpenses(monthPendingExpenses);
 
     const ledgerRevenue = sumKnownField(monthLedger, [
-      "net_revenue",
       "revenue",
+      "net_revenue",
       "sales_amount",
     ]);
 
     const ledgerCogs = sumKnownField(monthLedger, [
+      "cost",
       "net_cogs",
       "cogs",
       "cost_amount",
       "cost_total",
     ]);
 
-    const ledgerGrossProfit = sumKnownField(monthLedger, ["gross_profit"]);
-    const ledgerNetProfit = sumKnownField(monthLedger, ["net_profit"]);
+    const ledgerGrossProfit = sumKnownField(monthLedger, [
+      "profit",
+      "gross_profit",
+    ]);
+    const storedLedgerNetProfit = sumKnownField(monthLedger, ["net_profit"]);
+    const ledgerNetProfit =
+      storedLedgerNetProfit ??
+      (ledgerGrossProfit === null
+        ? null
+        : ledgerGrossProfit - monthExpenseAmount);
 
     const settings = settingsResult.rows[0] ?? {};
     const accountingCurrency =
@@ -705,6 +1098,11 @@ export default {
       firstText(settings, ["display_currency"]) || accountingCurrency;
 
     const lowStockProducts = buildLowStock(productsResult.rows);
+    const cashClosing = buildCashClosingSnapshot(
+      dailyCashClosingsResult.rows,
+      todayKey,
+      monthKey,
+    );
 
     const snapshot = {
       generatedAt: now.toISOString(),
@@ -723,9 +1121,7 @@ export default {
           sumRows(todayRefunds, ["refund_amount", "amount", "total"]),
         ),
         expenseCount: todayExpenses.length,
-        expenseAmount: roundMoney(
-          sumRows(todayExpenses, ["amount", "expense_amount", "total"]),
-        ),
+        expenseAmount: roundMoney(sumExpenses(todayExpenses)),
         appointmentCount: todayAppointments.length,
       },
       month: {
@@ -736,6 +1132,8 @@ export default {
         refundAmount: roundMoney(monthRefundAmount),
         expenseCount: monthExpenses.length,
         expenseAmount: roundMoney(monthExpenseAmount),
+        pendingExpenseCount: monthPendingExpenses.length,
+        pendingExpenseAmount: roundMoney(monthPendingExpenseAmount),
         netCashAfterRefundsAndExpenses: roundMoney(
           monthRevenue - monthRefundAmount - monthExpenseAmount,
         ),
@@ -752,6 +1150,7 @@ export default {
         lowStockCount: lowStockProducts.length,
         lowStockProducts,
       },
+      cashClosing,
       topItemsThisMonth: buildTopItems(
         orderItemsResult.rows,
         monthKey,
@@ -768,6 +1167,7 @@ export default {
             "Clearly distinguish facts, risks, and recommendations.",
             "Do not expose customer names, phone numbers, emails, or other personal data.",
             "Return a professional business analysis plus zero to three review actions.",
+            "Use the daily cash-closing snapshot to identify missing closings or cash differences.",
             "Review actions are proposals only. They must never modify data, send messages, or execute work before explicit administrator approval.",
             "Only create an action when the supplied snapshot contains a concrete issue that needs human review.",
           ].join(" ")
@@ -779,155 +1179,192 @@ export default {
             "返回专业经营分析，并可提出零到三个需要管理员处理的审核建议。",
             "这些建议只能建立待批准申请，禁止直接修改数据、发送信息或执行任何操作。",
             "只有经营快照中存在明确问题时才建立申请；没有明确问题时 actions 返回空数组。",
+            "必须检查每日现金关账状态、现金差额以及本月存在差额的天数。",
             "回答结构：经营结论、关键数字、异常或风险、最优先的三个行动。",
             "默认使用简体中文，表达清楚、专业、直接。",
           ].join(" ");
 
-    const openAIResponse = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${openAIKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model,
-        instructions,
-        input: [
+    let structuredOutput: AssistantStructuredOutput;
+    let effectiveModel = model;
+    let mode = "approval_required";
+    let provider = "openai";
+    let providerWarning = "";
+
+    if (!openAIKey) {
+      structuredOutput = buildRuleBasedAnalysis(
+        snapshot as unknown as JsonRecord,
+        question,
+        language,
+      );
+      effectiveModel = "gtb-local-rule-engine-v1";
+      mode = "local_fallback";
+      provider = "local";
+      providerWarning =
+        "服务器尚未设置 OPENAI_API_KEY，已自动使用本地智能分析。";
+    } else {
+      try {
+        const openAIResponse = await fetch(
+          "https://api.openai.com/v1/responses",
           {
-            role: "user",
-            content: [
-              {
-                type: "input_text",
-                text: [
-                  `经营问题：${question}`,
-                  "",
-                  "经营数据快照：",
-                  JSON.stringify(snapshot, null, 2),
-                ].join("\n"),
-              },
-            ],
-          },
-        ],
-        text: {
-          format: {
-            type: "json_schema",
-            name: "gtb_business_analysis",
-            description:
-              "Business analysis and administrator-approval action proposals.",
-            strict: true,
-            schema: {
-              type: "object",
-              additionalProperties: false,
-              properties: {
-                answer: { type: "string" },
-                actions: {
-                  type: "array",
-                  maxItems: 3,
-                  items: {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${openAIKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model,
+              instructions,
+              input: [
+                {
+                  role: "user",
+                  content: [
+                    {
+                      type: "input_text",
+                      text: [
+                        `经营问题：${question}`,
+                        "",
+                        "经营数据快照：",
+                        JSON.stringify(snapshot, null, 2),
+                      ].join("\n"),
+                    },
+                  ],
+                },
+              ],
+              text: {
+                format: {
+                  type: "json_schema",
+                  name: "gtb_business_analysis",
+                  description:
+                    "Business analysis and administrator-approval action proposals.",
+                  strict: true,
+                  schema: {
                     type: "object",
                     additionalProperties: false,
                     properties: {
-                      action_type: {
-                        type: "string",
-                        enum: [
-                          "review_low_stock",
-                          "review_pending_appointments",
-                          "review_cash_flow",
-                          "review_profitability",
-                          "review_service_performance",
-                          "review_data_quality",
-                        ],
-                      },
-                      target_type: {
-                        type: "string",
-                        enum: [
-                          "inventory",
-                          "appointments",
-                          "finance",
-                          "services",
-                          "system",
-                        ],
-                      },
-                      target_id: { type: "string" },
-                      title: { type: "string" },
-                      description: { type: "string" },
-                      risk_level: {
-                        type: "string",
-                        enum: ["low", "medium", "high"],
-                      },
-                      payload: {
-                        type: "object",
-                        additionalProperties: false,
-                        properties: {
-                          metric_name: { type: "string" },
-                          metric_value: { type: "number" },
-                          related_count: { type: "integer" },
-                          reference_period: { type: "string" },
-                          recommended_next_step: { type: "string" },
+                      answer: { type: "string" },
+                      actions: {
+                        type: "array",
+                        maxItems: 3,
+                        items: {
+                          type: "object",
+                          additionalProperties: false,
+                          properties: {
+                            action_type: {
+                              type: "string",
+                              enum: [
+                                "review_low_stock",
+                                "review_pending_appointments",
+                                "review_cash_flow",
+                                "review_profitability",
+                                "review_service_performance",
+                                "review_data_quality",
+                              ],
+                            },
+                            target_type: {
+                              type: "string",
+                              enum: [
+                                "inventory",
+                                "appointments",
+                                "finance",
+                                "services",
+                                "system",
+                              ],
+                            },
+                            target_id: { type: "string" },
+                            title: { type: "string" },
+                            description: { type: "string" },
+                            risk_level: {
+                              type: "string",
+                              enum: ["low", "medium", "high"],
+                            },
+                            payload: {
+                              type: "object",
+                              additionalProperties: false,
+                              properties: {
+                                metric_name: { type: "string" },
+                                metric_value: { type: "number" },
+                                related_count: { type: "integer" },
+                                reference_period: { type: "string" },
+                                recommended_next_step: { type: "string" },
+                              },
+                              required: [
+                                "metric_name",
+                                "metric_value",
+                                "related_count",
+                                "reference_period",
+                                "recommended_next_step",
+                              ],
+                            },
+                          },
+                          required: [
+                            "action_type",
+                            "target_type",
+                            "target_id",
+                            "title",
+                            "description",
+                            "risk_level",
+                            "payload",
+                          ],
                         },
-                        required: [
-                          "metric_name",
-                          "metric_value",
-                          "related_count",
-                          "reference_period",
-                          "recommended_next_step",
-                        ],
                       },
                     },
-                    required: [
-                      "action_type",
-                      "target_type",
-                      "target_id",
-                      "title",
-                      "description",
-                      "risk_level",
-                      "payload",
-                    ],
+                    required: ["answer", "actions"],
                   },
                 },
               },
-              required: ["answer", "actions"],
-            },
+              max_output_tokens: 1400,
+              store: false,
+            }),
           },
-        },
-        max_output_tokens: 1800,
-        store: false,
-      }),
-    });
+        );
 
-    const openAIPayload = (await openAIResponse.json()) as JsonRecord;
+        const openAIPayload = (await openAIResponse.json()) as JsonRecord;
 
-    if (!openAIResponse.ok) {
-      const errorRecord =
-        openAIPayload.error && typeof openAIPayload.error === "object"
-          ? (openAIPayload.error as JsonRecord)
-          : {};
+        if (!openAIResponse.ok) {
+          providerWarning = getOpenAIErrorMessage(openAIPayload);
+          structuredOutput = buildRuleBasedAnalysis(
+            snapshot as unknown as JsonRecord,
+            question,
+            language,
+          );
+          effectiveModel = "gtb-local-rule-engine-v1";
+          mode = "local_fallback";
+          provider = "local";
+        } else {
+          const rawOutput = extractOpenAIText(openAIPayload);
+          const parsedOutput = rawOutput
+            ? parseStructuredOutput(rawOutput)
+            : null;
 
-      return jsonResponse(
-        {
-          error: firstText(errorRecord, ["message"]) || "OpenAI 请求失败",
-          status: openAIResponse.status,
-        },
-        502,
-      );
-    }
-
-    const rawOutput = extractOpenAIText(openAIPayload);
-
-    if (!rawOutput) {
-      return jsonResponse({ error: "AI 没有返回可显示的文字" }, 502);
-    }
-
-    const structuredOutput = parseStructuredOutput(rawOutput);
-
-    if (!structuredOutput?.answer) {
-      return jsonResponse(
-        {
-          error: "AI 返回的数据格式不正确，请重新分析。",
-          details: "structured_output_parse_failed",
-        },
-        502,
-      );
+          if (!parsedOutput?.answer) {
+            providerWarning =
+              "OpenAI 返回的数据格式不完整，已自动使用本地智能分析。";
+            structuredOutput = buildRuleBasedAnalysis(
+              snapshot as unknown as JsonRecord,
+              question,
+              language,
+            );
+            effectiveModel = "gtb-local-rule-engine-v1";
+            mode = "local_fallback";
+            provider = "local";
+          } else {
+            structuredOutput = parsedOutput;
+          }
+        }
+      } catch (openAIError) {
+        providerWarning =
+          openAIError instanceof Error
+            ? openAIError.message
+            : "OpenAI 服务暂时不可用";
+        structuredOutput = buildRuleBasedAnalysis(
+          snapshot as unknown as JsonRecord,
+          question,
+          language,
+        );
+        effectiveModel = "gtb-local-rule-engine-v1";
+        mode = "local_fallback";
+        provider = "local";
+      }
     }
 
     const contextRecord = ctx as unknown as {
@@ -940,7 +1377,7 @@ export default {
       structuredOutput.actions,
       {
         question,
-        model,
+        model: effectiveModel,
         createdBy,
       },
     );
@@ -948,9 +1385,11 @@ export default {
     return jsonResponse({
       answer: structuredOutput.answer,
       snapshot,
-      model,
+      model: effectiveModel,
+      provider,
+      providerWarning: providerWarning || null,
       generatedAt: now.toISOString(),
-      mode: "approval_required",
+      mode,
       proposedActionCount: structuredOutput.actions.length,
       actionRequests: savedActionResult.actions,
       actionWarnings: savedActionResult.warnings,

@@ -44,6 +44,18 @@ type BusinessSnapshot = {
     lowStockCount?: number;
     lowStockProducts?: Array<Record<string, unknown>>;
   };
+  cashClosing?: {
+    todayStatus?: string;
+    todayExpectedCash?: number;
+    todayActualCash?: number;
+    todayDifference?: number;
+    latestClosingDate?: string | null;
+    latestStatus?: string | null;
+    latestDifference?: number;
+    monthClosingCount?: number;
+    monthDifferenceTotal?: number;
+    unbalancedCount?: number;
+  };
   topItemsThisMonth?: Array<Record<string, unknown>>;
   dataWarnings?: string[];
 };
@@ -54,6 +66,8 @@ type AssistantResponse = {
   model: string;
   generatedAt: string;
   mode: string;
+  provider?: string;
+  providerWarning?: string | null;
 };
 
 type ConversationItem = {
@@ -67,6 +81,7 @@ const quickQuestions = [
   "分析本月营业额、退款、支出和利润情况，有哪些风险？",
   "现在有哪些库存或预约问题需要优先处理？",
   "分析本月热销服务，并给出三个提高利润的建议。",
+  "检查今天的现金关账和本月现金差额，有没有需要马上处理的问题？",
 ];
 
 function AIBusinessAssistant() {
@@ -137,6 +152,14 @@ function AIBusinessAssistant() {
           snapshot.inventory?.lowStockCount ?? 0
         ),
         icon: "📦",
+      },
+      {
+        label: "今日现金差额",
+        english: "Cash Difference",
+        value: formatMoney(
+          Number(snapshot.cashClosing?.todayDifference ?? 0)
+        ),
+        icon: "💵",
       },
     ];
   }, [formatMoney, latestResponse]);
@@ -279,9 +302,25 @@ function AIBusinessAssistant() {
 
         <div style={heroContent}>
           <div style={heroBadges}>
-            <span style={onlineBadge}>
-              <span style={onlineDot} />
-              AI ONLINE
+            <span
+              style={
+                latestResponse?.mode === "local_fallback"
+                  ? localBadge
+                  : onlineBadge
+              }
+            >
+              <span
+                style={
+                  latestResponse?.mode === "local_fallback"
+                    ? localDot
+                    : onlineDot
+                }
+              />
+              {latestResponse?.mode === "local_fallback"
+                ? "LOCAL ANALYSIS"
+                : latestResponse
+                  ? "AI ONLINE"
+                  : "HYBRID READY"}
             </span>
 
             <span style={analysisBadge}>
@@ -306,7 +345,7 @@ function AIBusinessAssistant() {
           </p>
 
           <div style={privacyNote}>
-            🔐 当前版本只做只读分析，不会自动修改订单、发送消息或执行操作。
+            🔐 当前版本只做只读分析；OpenAI 额度不可用时会自动切换本地智能分析，不会中断使用。
           </div>
         </div>
       </section>
@@ -395,6 +434,7 @@ function AIBusinessAssistant() {
             <Capability text="低库存产品" />
             <Capability text="待确认预约" />
             <Capability text="本月热销项目" />
+            <Capability text="每日现金关账与差额" />
           </div>
         </aside>
 
@@ -542,6 +582,13 @@ function AIBusinessAssistant() {
                       )}
                     </div>
 
+                    {item.response.providerWarning && (
+                      <div style={providerNotice}>
+                        <strong>已启用备用分析模式</strong>
+                        <span>{item.response.providerWarning}</span>
+                      </div>
+                    )}
+
                     <div style={answerText}>
                       {item.response.answer}
                     </div>
@@ -553,7 +600,12 @@ function AIBusinessAssistant() {
                           .businessTimeZone ||
                           "Asia/Yangon"}
                       </span>
-                      <span>模式：只读分析</span>
+                      <span>
+                        模式：
+                        {item.response.mode === "local_fallback"
+                          ? "本地智能分析"
+                          : "OpenAI 智能分析"}
+                      </span>
                     </div>
                   </article>
                 ))}
@@ -700,6 +752,19 @@ const onlineDot = {
   boxShadow: "0 0 14px #22c55e",
 };
 
+const localBadge = {
+  ...onlineBadge,
+  border: "1px solid rgba(250,204,21,.3)",
+  background: "rgba(250,204,21,.1)",
+  color: "#fde68a",
+};
+
+const localDot = {
+  ...onlineDot,
+  background: "#facc15",
+  boxShadow: "0 0 14px #facc15",
+};
+
 const analysisBadge = {
   padding: "7px 10px",
   border: "1px solid rgba(255,255,255,.12)",
@@ -753,7 +818,7 @@ const privacyNote = {
 const summaryGrid = {
   display: "grid",
   gridTemplateColumns:
-    "repeat(5,minmax(0,1fr))",
+    "repeat(6,minmax(0,1fr))",
   gap: 14,
   marginTop: 18,
 };
@@ -1154,6 +1219,19 @@ const latestBadge = {
   color: "#15803d",
   fontSize: 8,
   fontWeight: 950,
+};
+
+const providerNotice = {
+  display: "grid",
+  gap: 5,
+  margin: "16px 20px 0",
+  padding: "12px 14px",
+  border: "1px solid #fde68a",
+  borderRadius: 13,
+  background: "#fffbeb",
+  color: "#92400e",
+  fontSize: 10,
+  lineHeight: 1.55,
 };
 
 const answerText = {
