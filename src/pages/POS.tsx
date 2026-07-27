@@ -740,14 +740,51 @@ function POS() {
     filteredServices.length === 0;
 
   return (
-    <div>
-      <div style={pageHeader}>
+    <div style={pageShell}>
+      <style>
+        {`
+          @media (max-width: 1180px) {
+            .gtb1n-pos-layout {
+              grid-template-columns: 1fr !important;
+            }
+
+            .gtb1n-pos-cart {
+              position: static !important;
+            }
+          }
+
+          @media (max-width: 720px) {
+            .gtb1n-pos-header {
+              align-items: flex-start !important;
+              flex-direction: column !important;
+            }
+
+            .gtb1n-pos-main-card {
+              padding: 16px !important;
+              border-radius: 18px !important;
+            }
+          }
+        `}
+      </style>
+
+      <div style={pageHeader} className="gtb1n-pos-header">
         <div>
+          <p style={headerEyebrow}>GTB1N RETAIL OPERATIONS</p>
+
           <h1 style={pageTitle}>POS 收银 / Point of Sale</h1>
 
           <p style={pageDescription}>
-            选择客户、车辆、服务、套餐或产品，然后完成收款
+            选择客户、车辆、服务、套餐或产品，然后安全完成收款。
           </p>
+
+          <div style={operationStatusRow}>
+            <span style={onlineBadge}>
+              <span style={onlineDot} />
+              POS ONLINE
+            </span>
+
+            <span style={securityBadge}>🔒 Secure Checkout</span>
+          </div>
 
           <div style={currencyStatusRow}>
             <span style={accountingCurrencyBadge}>
@@ -772,8 +809,8 @@ function POS() {
         </button>
       </div>
 
-      <div style={layout}>
-        <section style={card}>
+      <div style={layout} className="gtb1n-pos-layout">
+        <section style={card} className="gtb1n-pos-main-card">
           <CustomerPanel
             members={members}
             vehicles={vehicles}
@@ -1077,7 +1114,8 @@ function POS() {
           )}
         </section>
 
-        <ShoppingCart
+        <div className="gtb1n-pos-cart">
+          <ShoppingCart
           cart={cart}
           discount={safeDiscount}
           paymentMethod={paymentMethod}
@@ -1090,6 +1128,7 @@ function POS() {
           onRemove={removeFromCart}
           onCheckout={checkout}
         />
+        </div>
       </div>
 
 
@@ -1310,29 +1349,89 @@ function getErrorMessage(error: unknown) {
   return "操作失败，请稍后重试";
 }
 
+const pageShell = {
+  minWidth: 0,
+  paddingBottom: 42,
+};
+
 const pageHeader = {
+  position: "relative" as const,
+  overflow: "hidden",
   display: "flex",
-
   alignItems: "center",
-
   justifyContent: "space-between",
-
   flexWrap: "wrap" as const,
+  gap: 22,
+  marginBottom: 22,
+  padding: "26px 28px",
+  border: "1px solid rgba(212,175,55,.28)",
+  borderRadius: 24,
+  background:
+    "linear-gradient(135deg, #090d16 0%, #111827 58%, #1b1508 100%)",
+  boxShadow: "0 20px 48px rgba(15,23,42,.16)",
+};
 
-  gap: 18,
-  marginBottom: 24,
+const headerEyebrow = {
+  margin: 0,
+  color: "#f4c84a",
+  fontSize: 10,
+  fontWeight: 950,
+  letterSpacing: "1.55px",
+};
+
+const operationStatusRow = {
+  display: "flex",
+  flexWrap: "wrap" as const,
+  gap: 8,
+  marginTop: 15,
+};
+
+const onlineBadge = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 7,
+  padding: "6px 10px",
+  border: "1px solid rgba(34,197,94,.28)",
+  borderRadius: 999,
+  background: "rgba(34,197,94,.10)",
+  color: "#86efac",
+  fontSize: 10,
+  fontWeight: 900,
+};
+
+const onlineDot = {
+  width: 7,
+  height: 7,
+  borderRadius: "50%",
+  background: "#22c55e",
+  boxShadow: "0 0 10px rgba(34,197,94,.9)",
+};
+
+const securityBadge = {
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "6px 10px",
+  border: "1px solid rgba(255,255,255,.12)",
+  borderRadius: 999,
+  background: "rgba(255,255,255,.06)",
+  color: "#cbd5e1",
+  fontSize: 10,
+  fontWeight: 850,
 };
 
 const pageTitle = {
-  margin: 0,
-
-  color: "#111827",
-  fontSize: 36,
+  margin: "7px 0 0",
+  color: "#ffffff",
+  fontSize: "clamp(31px, 4vw, 46px)",
+  lineHeight: 1.05,
+  fontWeight: 950,
+  letterSpacing: "-1px",
 };
 
 const pageDescription = {
-  margin: "7px 0 0",
-  color: "#6b7280",
+  margin: "10px 0 0",
+  color: "#94a3b8",
+  lineHeight: 1.65,
 };
 
 const currencyStatusRow = {
@@ -1376,36 +1475,30 @@ const currencyArrow = {
 };
 
 const refreshButton = {
-  padding: "11px 16px",
-
-  border: "1px solid #d1d5db",
-
-  borderRadius: 11,
-
-  background: "#ffffff",
-  color: "#374151",
-
+  padding: "12px 17px",
+  border: "1px solid rgba(255,255,255,.14)",
+  borderRadius: 12,
+  background: "linear-gradient(135deg,#f4cf61,#c99518)",
+  color: "#111827",
   cursor: "pointer",
-  fontWeight: 800,
+  fontWeight: 950,
+  boxShadow: "0 10px 24px rgba(212,175,55,.20)",
 };
 
 const layout = {
   display: "grid",
-
-  gridTemplateColumns: "minmax(0, 1.3fr) minmax(340px, .9fr)",
-
+  gridTemplateColumns: "minmax(0, 1.45fr) minmax(365px, .75fr)",
   alignItems: "start",
-  gap: 24,
+  gap: 22,
 };
 
 const card = {
   minWidth: 0,
   padding: 24,
-
-  borderRadius: 20,
+  border: "1px solid #e2e8f0",
+  borderRadius: 22,
   background: "#ffffff",
-
-  boxShadow: "0 10px 30px rgba(15,23,42,.08)",
+  boxShadow: "0 14px 38px rgba(15,23,42,.08)",
 };
 
 const packageSection = {

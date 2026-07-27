@@ -382,9 +382,10 @@ const modal = {
   width: "min(1080px, 100%)",
   maxHeight: "92vh",
   overflowY: "auto" as const,
+  border: "1px solid rgba(212,175,55,.24)",
   borderRadius: 24,
   background: "#ffffff",
-  boxShadow: "0 30px 90px rgba(15,23,42,.35)",
+  boxShadow: "0 34px 100px rgba(15,23,42,.42)",
 };
 
 const header = {
@@ -392,25 +393,38 @@ const header = {
   justifyContent: "space-between",
   gap: 16,
   padding: "24px 26px",
-  borderBottom: "1px solid #e2e8f0",
+  borderBottom: "1px solid rgba(212,175,55,.24)",
+  background:
+    "linear-gradient(135deg,#090d16 0%,#111827 62%,#1a1408 100%)",
 };
 
 const eyebrow = {
   margin: 0,
-  color: "#2563eb",
+  color: "#f4cf61",
   fontSize: 10,
-  fontWeight: 900,
+  fontWeight: 950,
   letterSpacing: "1.5px",
 };
 
-const title = { margin: "7px 0 0", color: "#0f172a", fontSize: 27 };
-const subtitle = { margin: "7px 0 0", color: "#64748b", fontWeight: 700 };
+const title = {
+  margin: "7px 0 0",
+  color: "#ffffff",
+  fontSize: 27,
+  fontWeight: 950,
+};
+
+const subtitle = {
+  margin: "7px 0 0",
+  color: "#cbd5e1",
+  fontWeight: 700,
+};
 const closeButton = {
   width: 42,
   height: 42,
-  border: "1px solid #cbd5e1",
+  border: "1px solid rgba(255,255,255,.16)",
   borderRadius: 12,
-  background: "#ffffff",
+  background: "rgba(255,255,255,.08)",
+  color: "#ffffff",
   cursor: "pointer",
   fontSize: 24,
 };
@@ -441,4 +455,12 @@ const finalPriceValue = { display: "block", marginTop: 4, color: "#0f172a", font
 const calculationHint = { display: "block", marginTop: 4, color: "#64748b" };
 const footerActions = { display: "flex", gap: 10 };
 const cancelButton = { padding: "12px 17px", border: "1px solid #cbd5e1", borderRadius: 12, background: "#ffffff", cursor: "pointer", fontWeight: 800 };
-const confirmButton = { padding: "12px 20px", border: "none", borderRadius: 12, background: "linear-gradient(135deg,#2563eb,#7c3aed)", color: "#ffffff", fontWeight: 900 };
+const confirmButton = {
+  padding: "12px 20px",
+  border: "none",
+  borderRadius: 12,
+  background: "linear-gradient(135deg,#f4cf61,#c99518)",
+  color: "#111827",
+  fontWeight: 950,
+  boxShadow: "0 10px 24px rgba(212,175,55,.22)",
+};

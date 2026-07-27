@@ -71,7 +71,21 @@ function ShoppingCart({
 
   return (
     <aside style={card}>
-      <h2 style={heading}>购物车 / Cart</h2>
+      <div style={cartHeader}>
+        <div>
+          <p style={eyebrow}>ACTIVE ORDER</p>
+          <h2 style={heading}>购物车 / Cart</h2>
+        </div>
+
+        <span style={itemCountBadge}>
+          {cart.reduce((sum, item) => sum + item.quantity, 0)} ITEMS
+        </span>
+      </div>
+
+      <div style={secureNotice}>
+        <span>🔒</span>
+        <span>GTB1N Secure Checkout</span>
+      </div>
 
       {cart.length === 0 ? (
         <div style={emptyCart}>
@@ -320,15 +334,58 @@ const card = {
   position: "sticky" as const,
   top: 18,
   minWidth: 0,
-  padding: 24,
-  borderRadius: 18,
-  background: "#ffffff",
-  boxShadow: "0 10px 25px rgba(0,0,0,.08)",
+  padding: 22,
+  border: "1px solid #d9e0ea",
+  borderRadius: 22,
+  background:
+    "linear-gradient(180deg,#ffffff 0%,#fbfcfe 100%)",
+  boxShadow: "0 18px 48px rgba(15,23,42,.12)",
+};
+
+const cartHeader = {
+  display: "flex",
+  alignItems: "flex-start",
+  justifyContent: "space-between",
+  gap: 12,
+};
+
+const eyebrow = {
+  margin: 0,
+  color: "#b88916",
+  fontSize: 9,
+  fontWeight: 950,
+  letterSpacing: "1.35px",
 };
 
 const heading = {
-  margin: "0 0 16px",
-  color: "#111827",
+  margin: "5px 0 0",
+  color: "#0f172a",
+  fontSize: 24,
+  fontWeight: 950,
+};
+
+const itemCountBadge = {
+  flexShrink: 0,
+  padding: "7px 10px",
+  borderRadius: 999,
+  background: "#111827",
+  color: "#f4cf61",
+  fontSize: 9,
+  fontWeight: 950,
+};
+
+const secureNotice = {
+  display: "flex",
+  alignItems: "center",
+  gap: 7,
+  marginTop: 14,
+  padding: "9px 11px",
+  border: "1px solid #dbeafe",
+  borderRadius: 11,
+  background: "#eff6ff",
+  color: "#1d4ed8",
+  fontSize: 10,
+  fontWeight: 850,
 };
 
 const emptyCart = {
@@ -570,10 +627,12 @@ const checkoutButton = {
   padding: 18,
   border: "none",
   borderRadius: 14,
-  background: "#16a34a",
+  background:
+    "linear-gradient(135deg,#16a34a 0%,#059669 100%)",
   color: "#ffffff",
-  fontSize: 19,
-  fontWeight: 900,
+  fontSize: 18,
+  fontWeight: 950,
+  boxShadow: "0 12px 28px rgba(22,163,74,.24)",
 };
 
 export default ShoppingCart;
