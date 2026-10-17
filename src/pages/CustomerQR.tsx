@@ -1,16 +1,23 @@
-import gtbMenuQr from "../assets/gtb-menu-qr.png";
+import { QRCodeSVG } from "qrcode.react";
 
 const menuUrl =
   "https://gtbautodetailingpos.pages.dev/menu";
 
+const bookingUrl =
+  "https://gtbautodetailingpos.pages.dev/menu#booking";
+
 function CustomerQR() {
-  async function copyMenuLink() {
+  async function copyBookingLink() {
     try {
-      await navigator.clipboard.writeText(menuUrl);
-      alert("客户菜单网址已复制");
+      await navigator.clipboard.writeText(bookingUrl);
+      alert("客户预约网址已复制");
     } catch {
-      window.prompt("请复制客户菜单网址：", menuUrl);
+      window.prompt("请复制客户预约网址：", bookingUrl);
     }
+  }
+
+  function openBooking() {
+    window.open(bookingUrl, "_blank");
   }
 
   function openCustomerMenu() {
@@ -53,14 +60,14 @@ function CustomerQR() {
 
       <div style={header} className="no-print">
         <div>
-          <p style={eyebrow}>CUSTOMER MENU</p>
+          <p style={eyebrow}>CUSTOMER BOOKING QR</p>
 
           <h1 style={heading}>
-            客户扫码菜单
+            客户扫码预约
           </h1>
 
           <p style={description}>
-            客户扫描二维码即可查看服务套餐和在线预约。
+            客户扫码后直接进入公开菜单的在线预约区域，提交后自动进入 POS 预约记录。
           </p>
         </div>
       </div>
@@ -75,30 +82,36 @@ function CustomerQR() {
           </div>
 
           <p style={subtitle}>
-            Service Menu & Appointment
+            Service Menu & Online Appointment
           </p>
 
           <div style={qrWrapper}>
-            <img
-              src={gtbMenuQr}
-              alt="GTB 客户菜单二维码"
-              style={qrImage}
+            <QRCodeSVG
+              value={bookingUrl}
+              size={390}
+              level="H"
+              includeMargin
+              imageSettings={{
+                src: "/gtb1n-logo.png",
+                height: 70,
+                width: 70,
+                excavate: true,
+              }}
             />
           </div>
 
           <h2 style={scanTitle}>
-            扫码查看服务菜单
+            扫码直接预约
           </h2>
 
           <p style={scanText}>
-            Scan to view services, packages and book an
-            appointment
+            Scan to choose a service and book an appointment directly
           </p>
 
           <div style={contact}>
-            <span>📞 09443751188</span>
             <span>📞 09695653413</span>
-            <span>📍 MUSE</span>
+            <span>📞 09443751188</span>
+            <span>📍 Lashio · 腊戌</span>
           </div>
         </section>
 
@@ -108,27 +121,35 @@ function CustomerQR() {
           </h2>
 
           <p style={label}>
-            正式客户菜单网址
+            客户直接预约网址
           </p>
 
           <div style={urlBox}>
-            {menuUrl}
+            {bookingUrl}
           </div>
 
           <button
             type="button"
-            onClick={openCustomerMenu}
+            onClick={openBooking}
             style={primaryButton}
           >
-            🌐 打开客户菜单
+            📅 打开客户预约
           </button>
 
           <button
             type="button"
-            onClick={copyMenuLink}
+            onClick={openCustomerMenu}
             style={secondaryButton}
           >
-            🔗 复制菜单网址
+            🌐 打开完整客户菜单
+          </button>
+
+          <button
+            type="button"
+            onClick={copyBookingLink}
+            style={secondaryButton}
+          >
+            🔗 复制预约网址
           </button>
 
           <button
@@ -136,15 +157,15 @@ function CustomerQR() {
             onClick={printQrCode}
             style={printButton}
           >
-            🖨️ 打印二维码
+            🖨️ 打印预约二维码
           </button>
 
           <div style={tipBox}>
-            <strong>使用建议</strong>
+            <strong>使用方式</strong>
 
             <p style={tipText}>
-              可以把二维码打印后放在收银台、客户休息区、
-              店铺门口或宣传单上。
+              客户扫码 → 选择服务 → 填写姓名、电话、车辆、日期和时间 →
+              提交预约 → POS 的预约管理中查看。
             </p>
           </div>
         </section>
@@ -220,13 +241,6 @@ const qrWrapper = {
   background: "#ffffff",
   borderRadius: "20px",
   border: "2px solid #e5e7eb",
-};
-
-const qrImage = {
-  display: "block",
-  width: "100%",
-  maxWidth: "390px",
-  height: "auto",
 };
 
 const scanTitle = {

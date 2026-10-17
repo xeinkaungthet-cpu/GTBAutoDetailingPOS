@@ -1,2013 +1,523 @@
-import {
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
-import { supabase } from "../lib/supabase";
+import { useEffect, useMemo, useState } from "react";
 import type { Service } from "../types/database";
 import { ServiceService } from "../services/serviceService";
-import type { Package } from "../services/packageService";
-import { PackageService } from "../services/packageService";
-import VehiclePricingService, {
-  type PackageVehiclePrice,
-  type ServiceVehiclePrice,
-  type VehicleSizeCode,
-  type VehicleSizeOption,
-} from "../services/vehiclePricingService";
-import Hero from "../components/menu/Hero";
-import CategorySection from "../components/menu/CategorySection";
 import BookingModal from "../components/menu/BookingModal";
-import Footer from "../components/menu/Footer";
-import PackageCard from "../components/menu/PackageCard";
-import { QRCodeSVG } from "qrcode.react";
-import ItemDetailModal, {
-  type CoatingOption,
-} from "../components/menu/ItemDetailModal";
-import CertificatesSection from "../components/menu/CertificatesSection";
-type ViewMode =
-  | "all"
-  | "packages"
-  | "services";
 
-type PublicBusinessProfile = {
-  store_name: string;
-  store_subtitle: string;
-  logo_url: string;
-  phone: string;
-  wechat: string;
-  telegram: string;
-  email: string;
-  address: string;
-  opening_time: string;
-  closing_time: string;
-  business_days: string[];
+type PriceRow = {
+  service: string;
+  zh: string;
+  prices: Array<number | null>;
 };
 
-const defaultBusinessProfile: PublicBusinessProfile = {
-  store_name: "GTB1N Auto Detailing & Window Film",
-  store_subtitle:
-    "Professional Auto Detailing & Car Wash",
-  logo_url: "/gtb1n-logo.png",
-  phone: "09443751188",
-  wechat: "",
-  telegram: "",
-  email: "",
-  address: "",
-  opening_time: "09:00",
-  closing_time: "18:00",
-  business_days: [
-    "Monday",
-    "Tuesday",
-    "Wednesday",
-    "Thursday",
-    "Friday",
-    "Saturday",
-  ],
+type FilmSpec = {
+  model: string;
+  name: string;
+  vlt: string;
+  privacy: string;
+  uv: string;
+  ir: string;
+  thickness: string;
+  use: string;
+  warning?: string;
 };
 
-function CustomerMenu() {
-  const [services, setServices] = useState<Service[]>([]);
-  const [packages, setPackages] = useState<Package[]>([]);
+const BRAND = {
+  name: "GTB1N Auto Detailing & Window Film",
+  location: "Lashio, Myanmar / 缅甸腊戌",
+  locationShort: "Lashio • 腊戌",
+  hotline: "09695653413",
+  phone2: "09443751188",
+  social: "buyaowen9",
+  hours: "8:30 AM – 7:00 PM",
+};
 
-  const [coatingOptionsByService, setCoatingOptionsByService] =
-    useState<Record<number, CoatingOption[]>>({});
+const vehicleColumns = [
+  "Small",
+  "Medium",
+  "Mini SUV",
+  "SUV",
+  "Large",
+  "Extra Large",
+];
 
-  const [selectedCoatingOption, setSelectedCoatingOption] =
-    useState<CoatingOption | null>(null);
+const detailingRows: PriceRow[] = [
+  { service: "Normal Wash", zh: "普通洗车", prices: [28000, 35000, 42000, 45000, 45000, 58000] },
+  { service: "Premium Wash", zh: "精洗", prices: [46000, 52000, 58000, 64000, 70000, 76000] },
+  { service: "Undercarriage Cleaning", zh: "底盘清洗", prices: [80000, 88000, 96000, 104000, 112000, 120000] },
+  { service: "Headlight Restoration & Polish", zh: "大灯翻新抛光", prices: [60000, 68000, 76000, 84000, 92000, 100000] },
+  { service: "Normal Polish", zh: "普通抛光", prices: [150000, 170000, 180000, 200000, 250000, 300000] },
+  { service: "Premium Polish", zh: "精细抛光", prices: [200000, 230000, 250000, 300000, 350000, 450000] },
+  { service: "Coating (6 Months)", zh: "镀晶 6个月", prices: [280000, 330000, 380000, 410000, 430000, 480000] },
+  { service: "Coating (1 Year)", zh: "镀晶 1年", prices: [380000, 430000, 480000, 580000, 680000, 780000] },
+  { service: "Coating (2 Years)", zh: "镀晶 2年", prices: [530000, 580000, 730000, 780000, 880000, 980000] },
+  { service: "Coating (3 Years)", zh: "镀晶 3年", prices: [680000, 780000, 880000, 980000, 1130000, 1280000] },
+  { service: "Coating (5 Years)", zh: "镀晶 5年", prices: [930000, 1030000, 1180000, 1330000, 1480000, 1630000] },
+  { service: "Interior Dry Wash", zh: "内饰干洗", prices: [180000, 200000, 210000, 230000, 260000, 330000] },
+  { service: "Engine Bay Detailing", zh: "发动机舱精洗", prices: [80000, 80000, 80000, 80000, 80000, 80000] },
+  { service: "Full Glass Package", zh: "全车玻璃护理", prices: [130000, 150000, 160000, 160000, 190000, null] },
+];
 
-  const [vehicleSizes, setVehicleSizes] = useState<
-    VehicleSizeOption[]
-  >([]);
+const luJiePackage = [
+  { vehicle: "Sedan / 轿车", price: 1100000 },
+  { vehicle: "SUV + Pickup / SUV + 皮卡", price: 1300000 },
+  { vehicle: "Large SUV + MPV / 大型SUV + MPV", price: 1550000 },
+];
 
-  const [
-    serviceVehiclePrices,
-    setServiceVehiclePrices,
-  ] = useState<ServiceVehiclePrice[]>([]);
+const luJieSingle = [
+  { item: "Windshield XC-50", zh: "前挡 XC-50", prices: [350000, 420000, 480000] },
+  { item: "One Front Side Window LS-25", zh: "单块前排侧窗 LS-25", prices: [140000, 160000, 190000] },
+  { item: "One Rear Side Window LS-15 / LS-10", zh: "单块后排侧窗 LS-15 / LS-10", prices: [140000, 160000, 190000] },
+  { item: "Rear Windshield LS-15 / LS-10", zh: "后挡 LS-15 / LS-10", prices: [320000, 380000, 450000] },
+];
 
-  const [
-    packageVehiclePrices,
-    setPackageVehiclePrices,
-  ] = useState<PackageVehiclePrice[]>([]);
+const luJieSpecs: FilmSpec[] = [
+  { model: "XC-50", name: "Black Crystal / 黑晶", vlt: "46%", privacy: "40 / 100", uv: "99%", ir: "96%±3", thickness: "2mil", use: "Windshield / 前挡" },
+  { model: "LS-25", name: "Xinghui Titanium Nitride / 星晖氮化钛", vlt: "25%", privacy: "60 / 100", uv: "99%", ir: "92%±3", thickness: "2mil", use: "Front Side Windows / 前排侧窗" },
+  { model: "LS-15", name: "Xinghui Titanium Nitride / 星晖氮化钛", vlt: "18%", privacy: "80 / 100", uv: "99%", ir: "95%±3", thickness: "2mil", use: "Rear Side + Rear Windshield / 后排侧窗 + 后挡" },
+  { model: "LS-10", name: "Xinghui Titanium Nitride / 星晖氮化钛", vlt: "10%", privacy: "100 / 100", uv: "99%", ir: "95%±3", thickness: "2mil", use: "Maximum Rear Privacy / 后排极深隐私", warning: "Not for front side windows / 不建议前排侧窗" },
+];
 
-  const [
-    selectedVehicleSize,
-    setSelectedVehicleSize,
-  ] = useState<VehicleSizeCode>("small");
-  const [businessProfile, setBusinessProfile] =
-    useState<PublicBusinessProfile>(
-      defaultBusinessProfile
-    );
-  const [selectedService, setSelectedService] =
-    useState<Service | null>(null);
+const nanoPackage = [
+  { vehicle: "Sedan / 轿车", price: 500000 },
+  { vehicle: "SUV + Pickup / SUV + 皮卡", price: 600000 },
+  { vehicle: "Large SUV + MPV / 大型SUV + MPV", price: 750000 },
+];
 
-  const [selectedPackage, setSelectedPackage] =
-    useState<Package | null>(null);
-const [detailService, setDetailService] =
-  useState<Service | null>(null);
+const nanoSingle = [
+  { item: "Windshield", zh: "前挡", prices: [160000, 190000, 230000] },
+  { item: "One Side Window", zh: "单块侧窗", prices: [60000, 70000, 90000] },
+  { item: "Rear Windshield", zh: "后挡", prices: [130000, 160000, 200000] },
+];
 
-const [detailPackage, setDetailPackage] =
-  useState<Package | null>(null);
-  const [searchQuery, setSearchQuery] =
-    useState("");
+const nanoPrivacy = [
+  { privacy: "40%", model: "NC-SI60", vlt: "57.3%", note: "Light & Clear · Windshield / 浅色清晰 · 建议前挡" },
+  { privacy: "60%", model: "NC-702", vlt: "36.5%", note: "Medium Shade · Side Windows / 中等颜色 · 建议侧窗" },
+  { privacy: "80%", model: "NC-K18", vlt: "16.9%", note: "Dark Privacy · Rear Windows / 深色隐私 · 建议后排" },
+  { privacy: "100%", model: "NC-0580", vlt: "2%", note: "Extra Dark · Rear Windows Only / 极深隐私 · 仅限后排" },
+];
 
-  const [viewMode, setViewMode] =
-    useState<ViewMode>("all");
+const posterImages = [
+  { src: "/menu-posters/11_detailing_price_list.png", title: "GTB1N Detailing Price List / 汽车美容价格表" },
+  { src: "/menu-posters/06_lujie_full_car_package.png", title: "Lu Jie Full-Car Package / 路界全车隔热膜套餐" },
+  { src: "/menu-posters/05_lujie_single_glass_prices.png", title: "Lu Jie Single-Glass Prices / 路界单块玻璃价格" },
+  { src: "/menu-posters/07_lujie_xc50.png", title: "XC-50 Black Crystal / XC-50 黑晶" },
+  { src: "/menu-posters/08_lujie_ls25.png", title: "LS-25 Xinghui Titanium Nitride / 星晖氮化钛" },
+  { src: "/menu-posters/09_lujie_ls15.png", title: "LS-15 Xinghui Titanium Nitride / 星晖氮化钛" },
+  { src: "/menu-posters/10_lujie_ls10.png", title: "LS-10 Maximum Rear Privacy / 后排极深隐私" },
+  { src: "/menu-posters/01_lujie_installation_price_list.png", title: "Lu Jie Installation Price List / 路界施工价格表" },
+  { src: "/menu-posters/02_lujie_product_specifications.png", title: "Lu Jie Product Specifications / 路界产品参数" },
+  { src: "/menu-posters/03_nano_full_car_price_list.png", title: "Nano Ceramic Film Prices / 纳米陶瓷高清膜价格" },
+  { src: "/menu-posters/04_nano_privacy_levels.png", title: "Nano Privacy Levels / 纳米膜隐私深浅" },
+];
 
-  const [selectedCategory, setSelectedCategory] =
-    useState("全部");
+function mmk(value: number | null) {
+  return value == null ? "—" : `${value.toLocaleString()} MMK`;
+}
 
-  const [loading, setLoading] = useState(true);
+export default function CustomerMenu() {
+  const [viewer, setViewer] = useState<{ src: string; title: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [bookableServices, setBookableServices] = useState<Service[]>([]);
+  const [selectedService, setSelectedService] = useState<Service | null>(null);
+  const [bookingLoading, setBookingLoading] = useState(true);
+  const [bookingError, setBookingError] = useState("");
 
-  const [errorMessage, setErrorMessage] =
-    useState("");
-
-  async function loadMenu() {
-    setLoading(true);
-    setErrorMessage("");
-
-    try {
-      const [
-        servicesData,
-        packagesData,
-        vehicleSizeData,
-        serviceVehiclePriceData,
-        packageVehiclePriceData,
-        coatingOptionsResponse,
-        profileResponse,
-      ] = await Promise.all([
-        ServiceService.getAll(),
-        PackageService.getActive(),
-        VehiclePricingService.getVehicleSizes(true),
-        VehiclePricingService.getAllServicePrices(true),
-        VehiclePricingService.getAllPackagePrices(true),
-        supabase.rpc(
-          "get_public_service_coating_options"
-        ),
-        supabase.rpc(
-          "get_public_business_profile"
-        ),
-      ]);
-
-      setServices(servicesData);
-      setPackages(packagesData);
-      setVehicleSizes(vehicleSizeData);
-      setServiceVehiclePrices(
-        serviceVehiclePriceData
-      );
-      setPackageVehiclePrices(
-        packageVehiclePriceData
-      );
-
-      if (coatingOptionsResponse.error) {
-        console.error(
-          "读取镀晶期限方案失败。请先运行 public_coating_options_menu_fix.sql：",
-          coatingOptionsResponse.error
-        );
-        setCoatingOptionsByService({});
-      } else {
-        const groupedOptions = (
-          (coatingOptionsResponse.data ?? []) as CoatingOption[]
-        ).reduce<Record<number, CoatingOption[]>>(
-          (result, option) => {
-            if (!result[option.service_id]) {
-              result[option.service_id] = [];
-            }
-
-            result[option.service_id].push(option);
-            return result;
-          },
-          {}
-        );
-
-        setCoatingOptionsByService(groupedOptions);
-      }
-
-      if (
-        vehicleSizeData.length > 0 &&
-        !vehicleSizeData.some(
-          (option) =>
-            option.code === selectedVehicleSize
-        )
-      ) {
-        setSelectedVehicleSize(
-          vehicleSizeData[0].code
-        );
-      }
-
-      if (profileResponse.error) {
-        console.error(
-          "读取公开店铺资料失败：",
-          profileResponse.error
-        );
-      } else {
-        const profileData = Array.isArray(
-          profileResponse.data
-        )
-          ? profileResponse.data[0]
-          : null;
-
-        if (profileData) {
-          setBusinessProfile({
-            store_name:
-              profileData.store_name ||
-              defaultBusinessProfile.store_name,
-            store_subtitle:
-              profileData.store_subtitle ||
-              defaultBusinessProfile.store_subtitle,
-            logo_url:
-              profileData.logo_url || "",
-            phone:
-              profileData.phone || "",
-            wechat:
-              profileData.wechat || "",
-            telegram:
-              profileData.telegram || "",
-            email:
-              profileData.email || "",
-            address:
-              profileData.address || "",
-            opening_time:
-              profileData.opening_time ||
-              defaultBusinessProfile.opening_time,
-            closing_time:
-              profileData.closing_time ||
-              defaultBusinessProfile.closing_time,
-            business_days: Array.isArray(
-              profileData.business_days
-            )
-              ? profileData.business_days
-              : defaultBusinessProfile.business_days,
-          });
-
-        
-        }
-      }
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "客户菜单加载失败";
-
-      setErrorMessage(message);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const telegramUrl = useMemo(() => `https://t.me/${BRAND.social}`, []);
 
   useEffect(() => {
-    loadMenu();
+    let alive = true;
+
+    ServiceService.getAll()
+      .then((rows) => {
+        if (!alive) return;
+        setBookableServices(rows.filter((service) => service.is_active !== false));
+      })
+      .catch(() => {
+        if (!alive) return;
+        setBookingError("在线预约暂时无法连接，请直接电话或 Telegram 联系。 / Online booking is temporarily unavailable.");
+      })
+      .finally(() => {
+        if (alive) setBookingLoading(false);
+      });
+
+    return () => {
+      alive = false;
+    };
   }, []);
 
-  const selectedVehicleOption = useMemo(
-    () =>
-      vehicleSizes.find(
-        (option) =>
-          option.code === selectedVehicleSize
-      ) ?? null,
-    [vehicleSizes, selectedVehicleSize]
-  );
-
-  const pricedServices = useMemo(
-    () =>
-      services.flatMap((service) => {
-        const vehiclePrice =
-          serviceVehiclePrices.find(
-            (priceRow) =>
-              Number(priceRow.service_id) ===
-                Number(service.id) &&
-              priceRow.vehicle_size_code ===
-                selectedVehicleSize &&
-              priceRow.is_active
-          );
-
-        if (!vehiclePrice) {
-          return [];
-        }
-
-        return [
-          {
-            ...service,
-            price: Number(vehiclePrice.price),
-            cost_price: Number(
-              vehiclePrice.cost_price
-            ),
-            duration_minutes: Number(
-              vehiclePrice.duration_minutes
-            ),
-            is_active:
-              service.is_active !== false &&
-              vehiclePrice.is_active,
-          } as Service,
-        ];
-      }),
-    [
-      services,
-      serviceVehiclePrices,
-      selectedVehicleSize,
-    ]
-  );
-
-  const pricedPackages = useMemo(
-    () =>
-      packages.flatMap((packageItem) => {
-        const vehiclePrice =
-          packageVehiclePrices.find(
-            (priceRow) =>
-              Number(priceRow.package_id) ===
-                Number(packageItem.id) &&
-              priceRow.vehicle_size_code ===
-                selectedVehicleSize &&
-              priceRow.is_active
-          );
-
-        if (!vehiclePrice) {
-          return [];
-        }
-
-        return [
-          {
-            ...packageItem,
-            package_price: Number(
-              vehiclePrice.price
-            ),
-            estimated_minutes: Number(
-              vehiclePrice.duration_minutes
-            ),
-          } as Package,
-        ];
-      }),
-    [
-      packages,
-      packageVehiclePrices,
-      selectedVehicleSize,
-    ]
-  );
-
-  function getAdjustedCoatingOptions(
-    serviceId: number
-  ): CoatingOption[] {
-    const options =
-      coatingOptionsByService[serviceId] ?? [];
-
-    const selectedPriceRow = serviceVehiclePrices.find(
-      (priceRow) =>
-        Number(priceRow.service_id) === Number(serviceId) &&
-        priceRow.vehicle_size_code === selectedVehicleSize &&
-        priceRow.is_active
-    );
-
-    const smallPriceRow = serviceVehiclePrices.find(
-      (priceRow) =>
-        Number(priceRow.service_id) === Number(serviceId) &&
-        priceRow.vehicle_size_code === "small" &&
-        priceRow.is_active
-    );
-
-    const selectedVehiclePrice = Number(
-      selectedPriceRow?.price ?? 0
-    );
-
-    const smallVehiclePrice = Number(
-      smallPriceRow?.price ?? selectedVehiclePrice
-    );
-
-    const vehicleDifference = Math.max(
-      0,
-      selectedVehiclePrice - smallVehiclePrice
-    );
-
-    return options.map((option) => ({
-      ...option,
-      price:
-        Number(option.price || 0) +
-        vehicleDifference,
-    }));
-  }
-
-  const activeServices = useMemo(
-    () =>
-      pricedServices.filter(
-        (service) =>
-          service.is_active !== false
-      ),
-    [pricedServices]
-  );
-
-  const categories = useMemo(() => {
-    const categoryList = activeServices.map(
-      (service) =>
-        service.category?.trim() || "其他"
-    );
-
-    return Array.from(new Set(categoryList));
-  }, [activeServices]);
-
-  const normalizedQuery =
-    searchQuery.trim().toLowerCase();
-
-  const filteredPackages = useMemo(
-    () =>
-      pricedPackages.filter((packageItem) =>
-        getPackageSearchText(
-          packageItem
-        ).includes(normalizedQuery)
-      ),
-    [pricedPackages, normalizedQuery]
-  );
-
-  const filteredServices = useMemo(
-    () =>
-      activeServices.filter((service) => {
-        const category =
-          service.category?.trim() ||
-          "其他";
-
-        const matchesCategory =
-          selectedCategory === "全部" ||
-          category === selectedCategory;
-
-        const matchesSearch =
-          getServiceSearchText(
-            service
-          ).includes(normalizedQuery);
-
-        return (
-          matchesCategory && matchesSearch
-        );
-      }),
-    [
-      activeServices,
-      normalizedQuery,
-      selectedCategory,
-    ]
-  );
-
-  const visiblePackages =
-    viewMode === "services"
-      ? []
-      : filteredPackages;
-
-  const visibleServices =
-    viewMode === "packages"
-      ? []
-      : filteredServices;
-
-  const visibleCategories = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          visibleServices.map(
-            (service) =>
-              service.category?.trim() ||
-              "其他"
-          )
-        )
-      ),
-    [visibleServices]
-  );
-
-  const resultCount =
-    visiblePackages.length +
-    visibleServices.length;
-
-  const normalizedPhone =
-    businessProfile.phone.trim();
-
-  const phoneLink = normalizedPhone
-    ? `tel:${normalizedPhone.replace(
-        /[^\d+]/g,
-        ""
-      )}`
-    : "";
-
-  const wechatId =
-    businessProfile.wechat.trim();
-
-  const telegramLink = getTelegramLink(
-    businessProfile.telegram
-  );
-
-  const emailAddress =
-    businessProfile.email.trim();
-
-  const emailLink = emailAddress
-    ? `mailto:${emailAddress}`
-    : "";
-
-  function changeViewMode(mode: ViewMode) {
-    setViewMode(mode);
-
-    if (mode === "packages") {
-      setSelectedCategory("全部");
-    }
-  }
-
-  function changeVehicleSize(
-    vehicleSizeCode: VehicleSizeCode
-  ) {
-    setSelectedVehicleSize(vehicleSizeCode);
-
-    setDetailService(null);
-    setDetailPackage(null);
-    setSelectedService(null);
-    setSelectedPackage(null);
-  }
-
-  function clearSearch() {
-    setSearchQuery("");
-    setSelectedCategory("全部");
-    setViewMode("all");
-  }
-
-  async function copyWeChatId() {
-    if (!wechatId) {
-      return;
-    }
-
+  async function copyContact() {
     try {
-      await navigator.clipboard.writeText(
-        wechatId
-      );
-
-      window.alert(
-        `微信号已复制：${wechatId}`
-      );
+      await navigator.clipboard.writeText(BRAND.social);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
     } catch {
-      window.prompt(
-        "请复制微信号 / Copy WeChat ID:",
-        wechatId
-      );
+      window.prompt("Copy WeChat / Telegram ID", BRAND.social);
     }
   }
 
-function scrollToTop() {
-  window.scrollTo({
-    top: 0,
-    behavior: "smooth",
-  });
-}
-  function handleSearchSubmit(
-    event: React.FormEvent<HTMLFormElement>
-  ) {
-    event.preventDefault();
-
-    document
-      .getElementById("menu-results")
-      ?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-  }
-
   return (
-    <div style={page}>
-      <style>
-        {`
-          @media (max-width: 720px) {
-            .menu-search-form {
-              flex-direction: column;
-            }
+    <div className="gtb-menu-page">
+      <style>{styles}</style>
 
-            .menu-search-button {
-              width: 100%;
-            }
-
-            .menu-heading-row {
-              align-items: flex-start !important;
-              flex-direction: column;
-            }
-
-            .customer-package-grid {
-              grid-template-columns: 1fr !important;
-            }
-
-            .customer-brand-card {
-              align-items: flex-start !important;
-              flex-direction: column;
-            }
-
-            .customer-brand-details {
-              width: 100%;
-            }
-
-            .customer-brand-meta {
-              grid-template-columns: 1fr !important;
-            }
-
-            .vehicle-size-grid {
-              grid-template-columns:
-                repeat(2, minmax(0, 1fr)) !important;
-            }
-          }
-        `}
-      </style>
-
-      <Hero />
-
-      <section
-        id="menu-content"
-        style={content}
-      >
-      
-        <div
-  style={headingRow}
-  className="menu-heading-row"
->
-  <div>
-    <p style={eyebrow}>
-      GTB SERVICE DIRECTORY
-    </p>
-
-    <h1 style={mainTitle}>
-      服务与套餐 / Services & Packages
-    </h1>
-
-    <p style={mainDescription}>
-      搜索并浏览我们的专业汽车美容服务、套餐价格和预约信息
-      <br />
-      Search and browse professional detailing services,
-      packages, prices and booking information
-    </p>
-  </div>
-
-  <div style={totalBadge}>
-    共 {pricedPackages.length + activeServices.length} 个项目
-    {" / "}
-    {pricedPackages.length + activeServices.length} Items
-  </div>
-</div>
-
-<section style={vehicleSelectorPanel}>
-  <div style={vehicleSelectorHeader}>
-    <div>
-      <p style={vehicleSelectorEyebrow}>
-        VEHICLE-SIZE PRICING
-      </p>
-
-      <h2 style={vehicleSelectorTitle}>
-        先选择您的车型大小 / Choose Vehicle Size
-      </h2>
-
-      <p style={vehicleSelectorDescription}>
-        洗车、抛光、镀晶和套餐价格会按照车型自动更新
-        <br />
-        Service and package prices update automatically
-        for the selected vehicle size
-      </p>
-    </div>
-
-    {selectedVehicleOption && (
-      <div style={selectedVehicleBadge}>
-        <span style={selectedVehicleBadgeIcon}>
-          {selectedVehicleOption.icon}
-        </span>
-
-        <span>
-          当前车型 / Selected
-          <strong style={selectedVehicleBadgeName}>
-            {selectedVehicleOption.name_zh}
-            {" · "}
-            {selectedVehicleOption.name_en}
-          </strong>
-        </span>
-      </div>
-    )}
-  </div>
-
-  <div
-    style={vehicleSizeGrid}
-    className="vehicle-size-grid"
-  >
-    {vehicleSizes.map((option) => {
-      const isSelected =
-        option.code === selectedVehicleSize;
-
-      return (
-        <button
-          key={option.code}
-          type="button"
-          onClick={() =>
-            changeVehicleSize(option.code)
-          }
-          aria-pressed={isSelected}
-          style={{
-            ...vehicleSizeButton,
-            borderColor: isSelected
-              ? "#2563eb"
-              : "#dbe4f0",
-            background: isSelected
-              ? "linear-gradient(135deg,#eff6ff,#dbeafe)"
-              : "#ffffff",
-            boxShadow: isSelected
-              ? "0 14px 30px rgba(37,99,235,.16)"
-              : "0 8px 20px rgba(15,23,42,.06)",
-            transform: isSelected
-              ? "translateY(-2px)"
-              : "none",
-          }}
-        >
-          <span style={vehicleSizeIcon}>
-            {option.icon}
-          </span>
-
-          <span style={vehicleSizeText}>
-            <strong style={vehicleSizeName}>
-              {option.name_zh}
-            </strong>
-
-            <span style={vehicleSizeEnglish}>
-              {option.name_en}
-            </span>
-
-            {(option.description_zh ||
-              option.description_en) && (
-              <small
-                style={vehicleSizeDescription}
-              >
-                {option.description_zh}
-                {option.description_zh &&
-                option.description_en
-                  ? " / "
-                  : ""}
-                {option.description_en}
-              </small>
-            )}
-          </span>
-
-          <span
-            style={{
-              ...vehicleSizeCheck,
-              background: isSelected
-                ? "#2563eb"
-                : "#e2e8f0",
-              color: isSelected
-                ? "#ffffff"
-                : "#94a3b8",
-            }}
-          >
-            {isSelected ? "✓" : "○"}
-          </span>
-        </button>
-      );
-    })}
-  </div>
-
-  <div style={vehiclePriceNotice}>
-    <span>💡</span>
-    <span>
-      下方显示的是
-      <strong style={vehiclePriceNoticeStrong}>
-        {selectedVehicleOption?.name_zh ??
-          "所选车型"}
-      </strong>
-      的专属价格；切换车型后所有项目会立即更新。
-    </span>
-  </div>
-</section>
-
-<div style={searchPanel}>
-          <form
-            onSubmit={handleSearchSubmit}
-            style={searchForm}
-            className="menu-search-form"
-          >
-            <div style={searchInputWrapper}>
-              <span style={searchIcon}>
-                🔍
-              </span>
-
-              <input
-                value={searchQuery}
-                onChange={(event) =>
-                  setSearchQuery(
-                    event.target.value
-                  )
-                }
-                placeholder="搜索套餐、服务或分类 / Search packages, services or categories..."
-                aria-label="搜索服务和套餐"
-                style={searchInput}
-              />
-
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    setSearchQuery("")
-                  }
-                  style={clearButton}
-                  aria-label="清除搜索"
-                >
-                  ×
-                </button>
-              )}
-            </div>
-
-            <button
-              type="submit"
-              style={searchButton}
-              className="menu-search-button"
-            >
-              搜索 / Search
-            </button>
-          </form>
-
-          <div style={filterHeader}>
+      <header className="hero">
+        <div className="hero-glow" />
+        <div className="hero-inner">
+          <div className="brand-line">
             <div>
-              <strong style={filterTitle}>
-                浏览项目 / Browse
-              </strong>
-
-<p style={filterDescription}>
-  选择套餐、服务项目或具体分类
-  <br />
-  Choose packages, services or categories
-</p>
+              <div className="brand">GTB1N</div>
+              <div className="brand-sub">AUTO DETAILING & WINDOW FILM</div>
             </div>
-
-<span style={resultBadge}>
-  找到 {resultCount} 个结果 / {resultCount} Results
-</span>
+            <div className="location-badge">📍 {BRAND.locationShort}</div>
           </div>
 
-          <div style={viewTabs}>
-            <FilterButton
-              active={viewMode === "all"}
-              onClick={() =>
-                changeViewMode("all")
-              }
-              icon="✨"
-            >
-              全部项目 / All
-            </FilterButton>
+          <h1>专业汽车美容 · 洗车 · 抛光 · 镀晶 · 汽车隔热膜</h1>
+          <p>Professional Auto Detailing, Car Wash, Polishing, Coating & Window Film</p>
 
-            <FilterButton
-              active={
-                viewMode === "packages"
-              }
-              onClick={() =>
-                changeViewMode("packages")
-              }
-              icon="🎁"
-            >
-              套餐 / Packages
-            </FilterButton>
-
-            <FilterButton
-              active={
-                viewMode === "services"
-              }
-              onClick={() =>
-                changeViewMode("services")
-              }
-              icon="🚗"
-            >
-              服务项目 / Services
-            </FilterButton>
+          <div className="hero-actions">
+            <a className="btn gold" href={`tel:${BRAND.hotline}`}>📞 {BRAND.hotline}</a>
+            <button className="btn dark" onClick={copyContact}>💬 {copied ? "已复制 / Copied" : `WeChat · TG ${BRAND.social}`}</button>
+            <a className="btn green" href={telegramUrl} target="_blank" rel="noreferrer">✈️ Telegram</a>
           </div>
 
-          {viewMode !== "packages" && (
-            <div style={categoryArea}>
-              <span style={categoryLabel}>
-  服务分类 / Categories：
-</span>
-
-              <div style={categoryButtons}>
-                <CategoryButton
-                  active={
-                    selectedCategory ===
-                    "全部"
-                  }
-                  onClick={() =>
-                    setSelectedCategory(
-                      "全部"
-                    )
-                  }
-                >
-                  全部分类 / All Categories
-                </CategoryButton>
-
-                {categories.map(
-                  (category) => (
-                    <CategoryButton
-                      key={category}
-                      active={
-                        selectedCategory ===
-                        category
-                      }
-                      onClick={() =>
-                        setSelectedCategory(
-                          category
-                        )
-                      }
-                    >
-                      {getCategoryIcon(
-                        category
-                      )}{" "}
-                      {category}
-                    </CategoryButton>
-                  )
-                )}
-              </div>
-            </div>
-          )}
+          <div className="quick-grid">
+            <Info label="LOCATION / 地址" value={BRAND.location} />
+            <Info label="OPEN / 营业时间" value={BRAND.hours} />
+            <Info label="HOTLINE / 电话" value={BRAND.hotline} />
+            <Info label="WECHAT · TG" value={BRAND.social} />
+          </div>
         </div>
+      </header>
 
-        <div id="menu-results">
-          {loading && (
-            <div style={loadingBox}>
-              <div style={loadingIcon}>
-                ⏳
+      <nav className="jump-nav">
+        <a href="#detailing">汽车美容价格</a>
+        <a href="#lujie">路界隔热膜</a>
+        <a href="#nano">纳米陶瓷膜</a>
+        <a href="#booking">在线预约</a>
+        <a href="#posters">完整海报</a>
+        <a href="#contact">联系门店</a>
+      </nav>
+
+      <main className="content">
+        <section id="detailing" className="section">
+          <SectionTitle eyebrow="GTB1N AUTO DETAILING" title="汽车美容服务价格表 / Detailing Price List" />
+          <div className="table-wrap">
+            <table className="price-table six">
+              <thead>
+                <tr>
+                  <th className="service-col">Service / 服务</th>
+                  {vehicleColumns.map((v) => <th key={v}>{v}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {detailingRows.map((row) => (
+                  <tr key={row.service}>
+                    <td className="service-name"><strong>{row.service}</strong><span>{row.zh}</span></td>
+                    {row.prices.map((price, i) => <td key={`${row.service}-${i}`}>{mmk(price)}</td>)}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="note">车型大小以现场确认结果为准 / Vehicle size is confirmed on site.</p>
+        </section>
+
+        <section id="lujie" className="section film-section">
+          <SectionTitle eyebrow="GTB1N SELECTED · LU JIE WINDOW FILM" title="路界汽车隔热膜 / Lu Jie Window Film" />
+
+          <div className="brand-card">
+            <div>
+              <div className="mini-kicker">FULL-CAR PACKAGE / 全车套餐</div>
+              <h3>XC-50 前挡 + LS-25 前排侧窗 + LS-15 后排侧窗及后挡</h3>
+              <p>Rear shade may use LS-15 or LS-10 according to customer choice. / 后排深色可选 LS-15 或 LS-10。</p>
+            </div>
+            <div className="warranty">6 YEARS<br/><span>厂家资料质保6年</span></div>
+          </div>
+
+          <div className="three-cards">
+            {luJiePackage.map((item) => <PriceCard key={item.vehicle} title={item.vehicle} price={item.price} />)}
+          </div>
+
+          <h3 className="subhead">单块玻璃施工价格 / Single-Glass Installation Prices</h3>
+          <div className="table-wrap">
+            <table className="price-table">
+              <thead><tr><th>Service / 项目</th><th>Sedan / 轿车</th><th>SUV + Pickup</th><th>Large SUV + MPV</th></tr></thead>
+              <tbody>
+                {luJieSingle.map((row) => (
+                  <tr key={row.item}>
+                    <td className="service-name"><strong>{row.item}</strong><span>{row.zh}</span></td>
+                    {row.prices.map((p, i) => <td key={i}>{mmk(p)}</td>)}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="alert red">ONE SIDE WINDOW = ONE GLASS PANEL, NOT A PAIR / 单块侧窗 = 一块玻璃，不是一对</div>
+
+          <h3 className="subhead">产品参数 / Product Specifications</h3>
+          <div className="spec-grid">
+            {luJieSpecs.map((spec) => <SpecCard key={spec.model} spec={spec} />)}
+          </div>
+          <p className="note strong">Manufacturer data / 厂家资料：UV、IR、厚度与质保信息按你提供的路界资料展示。</p>
+          <div className="alert">隐私指数越高，膜越深；Privacy Index 不是实际 VLT / Higher Privacy Index = darker film; Privacy Index is not actual VLT.</div>
+        </section>
+
+        <section id="nano" className="section nano-section">
+          <SectionTitle eyebrow="GTB1N SELECTED" title="纳米陶瓷原色高清膜 / Nano Ceramic Original Color HD Film" />
+          <div className="three-cards">
+            {nanoPackage.map((item) => <PriceCard key={item.vehicle} title={item.vehicle} price={item.price} />)}
+          </div>
+
+          <h3 className="subhead">单独施工 / Individual Installation</h3>
+          <div className="table-wrap">
+            <table className="price-table">
+              <thead><tr><th>Service / 项目</th><th>Sedan / 轿车</th><th>SUV + Pickup</th><th>Large SUV + MPV</th></tr></thead>
+              <tbody>
+                {nanoSingle.map((row) => (
+                  <tr key={row.item}>
+                    <td className="service-name"><strong>{row.item}</strong><span>{row.zh}</span></td>
+                    {row.prices.map((p, i) => <td key={i}>{mmk(p)}</td>)}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <h3 className="subhead">选择隐私深浅 / Choose Your Privacy Level</h3>
+          <div className="privacy-grid">
+            {nanoPrivacy.map((item) => (
+              <div className="privacy-card" key={item.model}>
+                <div className="privacy-number">{item.privacy}</div>
+                <div><strong>{item.model}</strong><span>VLT {item.vlt}</span><p>{item.note}</p></div>
               </div>
+            ))}
+          </div>
+          <div className="alert red">NC-0580 不建议用于前挡或前排侧窗 / NC-0580 is not recommended for windshield or front side windows.</div>
+          <p className="note strong">Nano Ceramic Material · No Manufacturer Warranty / 纳米陶瓷材质 · 无厂家质保。旧膜拆除另计 / Old film removal extra.</p>
+        </section>
 
-              <strong>
-  正在加载客户菜单…… / Loading Menu...
-</strong>
+
+        <section id="booking" className="section booking-section">
+          <SectionTitle eyebrow="ONLINE BOOKING" title="在线预约 / Book a Service" />
+          <p className="section-copy">价格请以上方车型价格表为准。这里保留你原来的 Supabase 在线预约功能。 / Use the price tables above for pricing; this section keeps your existing Supabase booking flow.</p>
+
+          {bookingLoading && <div className="booking-status">正在加载可预约项目… / Loading bookable services…</div>}
+          {bookingError && <div className="booking-status warning">{bookingError}</div>}
+
+          {!bookingLoading && bookableServices.length > 0 && (
+            <div className="booking-grid">
+              {bookableServices.map((service) => (
+                <button className="booking-card" key={service.id} onClick={() => setSelectedService(service)}>
+                  <span className="booking-category">{service.category || "Service"}</span>
+                  <strong>{service.service_name}</strong>
+                  {service.service_name_en && <small>{service.service_name_en}</small>}
+                  <span className="booking-action">预约 / Book →</span>
+                </button>
+              ))}
             </div>
           )}
+        </section>
 
-          {errorMessage && (
-            <div style={errorBox}>
-              <div style={{ fontSize: 34 }}>
-                ⚠️
-              </div>
+        <section id="posters" className="section">
+          <SectionTitle eyebrow="ORIGINAL MENU POSTERS" title="完整菜单海报 / Full Menu Posters" />
+          <p className="section-copy">点击图片可放大。以下已把你提供的全部菜单海报加入客户网页。</p>
+          <div className="poster-grid">
+            {posterImages.map((poster) => (
+              <button className="poster-card" key={poster.src} onClick={() => setViewer(poster)}>
+                <img src={poster.src} alt={poster.title} loading="lazy" />
+                <span>{poster.title}</span>
+              </button>
+            ))}
+          </div>
+        </section>
 
-              <div>
-                <strong>
-  菜单加载失败 / Failed to Load Menu
-</strong>
+        <section id="contact" className="section contact-section">
+          <SectionTitle eyebrow="GTB1N LASHIO" title="联系我们 / Contact GTB1N" />
+          <div className="contact-grid">
+            <Info label="ADDRESS / 地址" value={BRAND.location} />
+            <Info label="BUSINESS HOURS / 营业时间" value={BRAND.hours} />
+            <Info label="HOTLINE / 电话" value={BRAND.hotline} />
+            <Info label="SECOND PHONE / 第二电话" value={BRAND.phone2} />
+            <Info label="WECHAT / 微信" value={BRAND.social} />
+            <Info label="TELEGRAM / TG" value={BRAND.social} />
+          </div>
+          <div className="hero-actions bottom-actions">
+            <a className="btn gold" href={`tel:${BRAND.hotline}`}>📞 Call {BRAND.hotline}</a>
+            <button className="btn dark" onClick={copyContact}>💬 Copy {BRAND.social}</button>
+            <a className="btn green" href={telegramUrl} target="_blank" rel="noreferrer">✈️ Telegram</a>
+          </div>
+        </section>
+      </main>
 
-                <p style={messageText}>
-                  {errorMessage}
-                </p>
+      <footer className="footer">GTB1N Auto Detailing & Window Film · {BRAND.locationShort} · Hotline {BRAND.hotline}</footer>
 
-                <button
-                  type="button"
-                  onClick={loadMenu}
-                  style={retryButton}
-                >
-                  重新加载 / Retry
-                </button>
-              </div>
-            </div>
-          )}
-
-          {!loading &&
-            !errorMessage &&
-            resultCount === 0 && (
-              <div style={emptyBox}>
-                <div style={emptyIcon}>
-                  🔎
-                </div>
-
-                <h2 style={emptyTitle}>
-  没有找到相关项目 / No Results Found
-</h2>
-
-<p style={emptyDescription}>
-  请尝试其他名称或服务分类
-  <br />
-  Try another name, keyword or category
-</p>
-
-                <button
-                  type="button"
-                  onClick={clearSearch}
-                  style={resetButton}
-                >
-                  查看全部项目 / View All
-                </button>
-              </div>
-            )}
-
-          {!loading &&
-            !errorMessage &&
-            visiblePackages.length >
-              0 && (
-              <section style={resultSection}>
-                <div style={sectionHeading}>
-                  <div>
-                    <p style={sectionEyebrow}>
-                      VALUE PACKAGES
-                    </p>
-
-                    <h2 style={sectionTitle}>
-                      🎁 热门套餐 / Packages
-                    </h2>
-                  </div>
-
-                  <span style={sectionCount}>
-                    {visiblePackages.length} 个套餐 / Packages
-                  </span>
-                </div>
-
-                <div
-                  style={packageGrid}
-                  className="customer-package-grid"
-                >
-                  {visiblePackages.map(
-                    (item) => (
-                      <PackageCard
-  key={item.id}
-  packageItem={item}
-  onBook={(packageItem) =>
-    setDetailPackage(packageItem)
-  }
-/>
-                    )
-                  )}
-                </div>
-              </section>
-            )}
-
-          {!loading &&
-            !errorMessage &&
-            visibleServices.length >
-              0 && (
-              <section style={resultSection}>
-                <div style={sectionHeading}>
-                  <div>
-                    <p style={sectionEyebrow}>
-                      PROFESSIONAL SERVICES
-                    </p>
-
-                    <h2 style={sectionTitle}>
-                      🚗 服务菜单 / Service
-                      Menu
-                    </h2>
-
-                    <p
-                      style={
-                        sectionDescription
-                      }
-                    >
-                      当前显示{" "}
-                      {selectedVehicleOption?.name_zh ??
-                        "所选车型"}
-                      的价格、施工效果和预约信息
-                    </p>
-                  </div>
-
-                  <span style={sectionCount}>
-                    {visibleServices.length} 个服务 / Services
-                  </span>
-                </div>
-
-                {visibleCategories.map(
-                  (category) => (
-                    <CategorySection
-                      key={category}
-                      title={category}
-                      services={visibleServices.filter(
-                        (service) =>
-                          (service.category?.trim() ||
-                            "其他") ===
-                          category
-                      )}
-                      onBook={(service) =>
-  setDetailService(service)
-}
-                    />
-                  )
-                )}
-              </section>
-            )}
-        </div>
-<CertificatesSection />
-<section
-  style={{
-    padding: "48px 20px",
-    background: "#f8fafc",
-  }}
->
-  <div
-    style={{
-      maxWidth: 520,
-      margin: "0 auto",
-      padding: 30,
-      background: "#ffffff",
-      borderRadius: 24,
-      textAlign: "center",
-      boxShadow: "0 18px 45px rgba(15,23,42,.10)",
-      border: "1px solid #e2e8f0",
-    }}
-  >
-    <div
-      style={{
-        display: "inline-flex",
-        padding: 16,
-        background: "#ffffff",
-        borderRadius: 18,
-        border: "1px solid #e2e8f0",
-      }}
-    >
-      <QRCodeSVG
-        value="https://gtbautodetailingpos.pages.dev/menu"
-        size={190}
-        level="H"
-        includeMargin
-      />
-    </div>
-
-    <h2
-      style={{
-        margin: "22px 0 6px",
-        color: "#0f172a",
-        fontSize: 25,
-      }}
-    >
-      扫码查看服务菜单
-    </h2>
-
-    <p
-      style={{
-        margin: "0 0 18px",
-        color: "#64748b",
-        fontSize: 14,
-      }}
-    >
-      Scan to View Our Service Menu
-    </p>
-
-    <a
-      href="https://gtbautodetailingpos.pages.dev/menu"
-      target="_blank"
-      rel="noreferrer"
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        minHeight: 44,
-        padding: "0 20px",
-        borderRadius: 999,
-        background: "#111827",
-        color: "#ffffff",
-        textDecoration: "none",
-        fontWeight: 800,
-        fontSize: 14,
-      }}
-    >
-      打开菜单 / Open Menu
-    </a>
-  </div>
-</section>
-        <Footer />
-      </section>
-{detailService && (
-  <ItemDetailModal
-    service={detailService}
-    coatingOptions={
-      getAdjustedCoatingOptions(detailService.id)
-    }
-    onClose={() =>
-      setDetailService(null)
-    }
-    onBook={(coatingOption) => {
-      setSelectedCoatingOption(
-        coatingOption ?? null
-      );
-      setSelectedService(detailService);
-      setDetailService(null);
-    }}
-  />
-)}
-
-{detailPackage && (
-  <ItemDetailModal
-    packageItem={detailPackage}
-    onClose={() =>
-      setDetailPackage(null)
-    }
-    onBook={() => {
-      setSelectedPackage(detailPackage);
-      setDetailPackage(null);
-    }}
-  />
-)}
       {selectedService && (
-        <BookingModal
-          service={selectedService}
-          vehicleSizeCode={selectedVehicleSize}
-          vehicleSizeName={
-            selectedVehicleOption?.name_zh
-          }
-          vehicleSizeNameEn={
-            selectedVehicleOption?.name_en
-          }
-          vehicleSizeIcon={
-            selectedVehicleOption?.icon
-          }
-          coatingOption={
-            selectedCoatingOption ?? undefined
-          }
-          quotedPrice={
-            selectedCoatingOption
-              ? Number(
-                  selectedCoatingOption.price || 0
-                )
-              : Number(selectedService.price || 0)
-          }
-          onClose={() => {
-            setSelectedService(null);
-            setSelectedCoatingOption(null);
-          }}
-        />
+        <BookingModal service={selectedService} onClose={() => setSelectedService(null)} />
       )}
 
-      {selectedPackage && (
-        <BookingModal
-          packageItem={selectedPackage}
-          vehicleSizeCode={selectedVehicleSize}
-          vehicleSizeName={
-            selectedVehicleOption?.name_zh
-          }
-          vehicleSizeNameEn={
-            selectedVehicleOption?.name_en
-          }
-          vehicleSizeIcon={
-            selectedVehicleOption?.icon
-          }
-          quotedPrice={Number(
-            selectedPackage.package_price || 0
-          )}
-          onClose={() =>
-            setSelectedPackage(null)
-          }
-        />
+      {viewer && (
+        <div className="viewer" role="dialog" aria-modal="true" onClick={() => setViewer(null)}>
+          <button className="viewer-close" onClick={() => setViewer(null)}>×</button>
+          <div className="viewer-inner" onClick={(e) => e.stopPropagation()}>
+            <img src={viewer.src} alt={viewer.title} />
+            <div>{viewer.title}</div>
+          </div>
+        </div>
       )}
-      <div style={floatingActions}>
-        {phoneLink && (
-          <a
-            href={phoneLink}
-            style={floatingPrimaryButton}
-            aria-label="电话联系"
-            title={`电话联系：${businessProfile.phone}`}
-          >
-            📞
-            <span style={floatingButtonText}>
-              电话 / Call
-            </span>
-          </a>
-        )}
-
-        {wechatId && (
-          <button
-            type="button"
-            onClick={() => {
-              void copyWeChatId();
-            }}
-            style={floatingWeChatButton}
-            aria-label="复制微信号"
-            title={`点击复制微信号：${wechatId}`}
-          >
-            💬
-            <span style={floatingButtonText}>
-              微信 / WeChat
-            </span>
-          </button>
-        )}
-
-        {telegramLink && (
-          <a
-            href={telegramLink}
-            target="_blank"
-            rel="noreferrer"
-            style={floatingTelegramButton}
-            aria-label="Telegram 联系"
-            title="Telegram 联系 / Contact Us"
-          >
-            ✈️
-            <span style={floatingButtonText}>
-              Telegram
-            </span>
-          </a>
-        )}
-
-        {emailLink && (
-          <a
-            href={emailLink}
-            style={floatingEmailButton}
-            aria-label="发送邮件"
-            title={`发送邮件：${emailAddress}`}
-          >
-            ✉️
-            <span style={floatingButtonText}>
-              Email
-            </span>
-          </a>
-        )}
-
-        <button
-          type="button"
-          onClick={scrollToTop}
-          style={floatingTopButton}
-          aria-label="返回顶部"
-          title="返回顶部 / Back to Top"
-        >
-          ↑
-        </button>
-      </div>
     </div>
   );
 }
 
-function getTelegramLink(value: string) {
-  const telegram = value.trim();
-
-  if (!telegram) {
-    return "";
-  }
-
-  if (/^https?:\/\//i.test(telegram)) {
-    return telegram;
-  }
-
-  if (telegram.startsWith("t.me/")) {
-    return `https://${telegram}`;
-  }
-
-  const username = telegram.replace(/^@/, "");
-
-  return username
-    ? `https://t.me/${encodeURIComponent(username)}`
-    : "";
+function SectionTitle({ eyebrow, title }: { eyebrow: string; title: string }) {
+  return <div className="section-title"><div>{eyebrow}</div><h2>{title}</h2></div>;
 }
 
-function FilterButton({
-  active,
-  onClick,
-  icon,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  icon: string;
-  children: string;
-}) {
+function Info({ label, value }: { label: string; value: string }) {
+  return <div className="info"><span>{label}</span><strong>{value}</strong></div>;
+}
+
+function PriceCard({ title, price }: { title: string; price: number }) {
+  return <div className="price-card"><span>{title}</span><strong>{mmk(price)}</strong></div>;
+}
+
+function SpecCard({ spec }: { spec: FilmSpec }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        ...filterButton,
-        background: active
-          ? "#111827"
-          : "#ffffff",
-        color: active
-          ? "#ffffff"
-          : "#334155",
-        borderColor: active
-          ? "#111827"
-          : "#dbe2ea",
-      }}
-    >
-      <span>{icon}</span>
-      <span>{children}</span>
-    </button>
+    <div className="spec-card">
+      <div className="spec-head"><strong>{spec.model}</strong><span>{spec.name}</span></div>
+      <div className="spec-stats">
+        <Stat label="VLT" value={spec.vlt} />
+        <Stat label="PRIVACY INDEX" value={spec.privacy} />
+        <Stat label="UV REJECTION" value={spec.uv} />
+        <Stat label="IR REJECTION" value={spec.ir} />
+        <Stat label="THICKNESS" value={spec.thickness} />
+      </div>
+      <p className="spec-use">{spec.use}</p>
+      {spec.warning && <div className="spec-warning">⚠ {spec.warning}</div>}
+    </div>
   );
 }
 
-function CategoryButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        ...categoryButton,
-        background: active
-          ? "#2563eb"
-          : "#eff6ff",
-        color: active
-          ? "#ffffff"
-          : "#1d4ed8",
-        borderColor: active
-          ? "#2563eb"
-          : "#bfdbfe",
-      }}
-    >
-      {children}
-    </button>
-  );
+function Stat({ label, value }: { label: string; value: string }) {
+  return <div className="stat"><span>{label}</span><strong>{value}</strong></div>;
 }
 
-function getServiceSearchText(
-  service: Service
-) {
-  return [
-    service.service_name,
-    service.service_name_en,
-    service.description,
-    service.description_en,
-    service.category,
-  ]
-    .map((value) =>
-      String(value ?? "").toLowerCase()
-    )
-    .join(" ");
-}
-
-function getPackageSearchText(
-  packageItem: Package
-) {
-  const includedServices =
-    packageItem.package_services
-      ?.map((item) =>
-        [
-          item.services?.service_name,
-          item.services?.service_name_en,
-        ]
-          .filter(Boolean)
-          .join(" ")
-      )
-      .join(" ") ?? "";
-
-  return [
-    packageItem.package_name,
-    packageItem.package_name_en,
-    packageItem.description,
-    packageItem.description_en,
-    includedServices,
-  ]
-    .map((value) =>
-      String(value ?? "").toLowerCase()
-    )
-    .join(" ");
-}
-
-function getCategoryIcon(
-  category: string
-) {
-  switch (category) {
-    case "洗车":
-      return "🚗";
-
-    case "美容":
-      return "✨";
-
-    case "镀膜":
-    case "镀晶":
-      return "🛡️";
-
-    case "清洁":
-      return "🧽";
-
-    default:
-      return "⭐";
+const styles = `
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; }
+  .gtb-menu-page { min-height: 100vh; background: #070707; color: #f8fafc; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  .hero { position: relative; overflow: hidden; border-bottom: 1px solid rgba(212,175,55,.32); background: radial-gradient(circle at 80% 10%, rgba(63,255,82,.16), transparent 33%), linear-gradient(135deg,#050505,#0d0d0d 60%,#05140a); }
+  .hero-glow { position:absolute; inset:-30% -10% auto auto; width:520px; height:520px; border-radius:50%; background:rgba(49,255,73,.09); filter:blur(70px); }
+  .hero-inner { position:relative; max-width:1180px; margin:auto; padding:38px 20px 34px; }
+  .brand-line { display:flex; align-items:flex-start; justify-content:space-between; gap:18px; }
+  .brand { font-size:clamp(52px,9vw,96px); line-height:.86; font-weight:1000; letter-spacing:-4px; background:linear-gradient(180deg,#fff4b5,#d5a625 55%,#805704); -webkit-background-clip:text; color:transparent; }
+  .brand-sub { margin-top:10px; color:#f9e7a3; font-size:13px; font-weight:900; letter-spacing:3px; }
+  .location-badge { padding:10px 14px; border:1px solid rgba(255,226,125,.35); border-radius:999px; color:#ffe98d; background:rgba(0,0,0,.45); font-weight:900; white-space:nowrap; }
+  .hero h1 { max-width:900px; margin:28px 0 8px; font-size:clamp(25px,4vw,44px); line-height:1.1; }
+  .hero p { margin:0; color:#b9c0c7; font-size:15px; }
+  .hero-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:24px; }
+  .btn { appearance:none; border:1px solid transparent; border-radius:12px; min-height:44px; padding:0 16px; display:inline-flex; align-items:center; justify-content:center; text-decoration:none; cursor:pointer; font-weight:900; font-size:14px; }
+  .btn.gold { background:linear-gradient(180deg,#ffe989,#d3a320); color:#0b0b0b; }
+  .btn.dark { background:#111; color:#fff; border-color:#3c3c3c; }
+  .btn.green { background:#31e84b; color:#061108; }
+  .quick-grid,.contact-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-top:26px; }
+  .info { padding:14px; border-radius:12px; background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.10); }
+  .info span { display:block; color:#8b929a; font-size:10px; font-weight:900; letter-spacing:1px; margin-bottom:6px; }
+  .info strong { color:#fff; font-size:14px; line-height:1.35; }
+  .jump-nav { position:sticky; top:0; z-index:20; display:flex; gap:4px; overflow:auto; padding:10px max(14px,calc((100% - 1180px)/2)); background:rgba(6,6,6,.92); backdrop-filter:blur(14px); border-bottom:1px solid #242424; }
+  .jump-nav a { white-space:nowrap; color:#ddd; text-decoration:none; padding:9px 12px; border-radius:999px; font-size:13px; font-weight:800; }
+  .jump-nav a:hover { background:#1a1a1a; color:#ffe17a; }
+  .content { max-width:1180px; margin:auto; padding:0 20px 60px; }
+  .section { padding:56px 0 8px; scroll-margin-top:70px; }
+  .section-title > div { color:#d7ad3a; font-size:12px; font-weight:1000; letter-spacing:2px; }
+  .section-title h2 { margin:7px 0 22px; font-size:clamp(27px,4vw,44px); letter-spacing:-1px; }
+  .section-copy,.note { color:#9da4ab; font-size:13px; line-height:1.6; }
+  .note.strong { color:#e4d394; }
+  .table-wrap { width:100%; overflow:auto; border:1px solid #2e2a1d; border-radius:14px; background:#0b0b0b; }
+  .price-table { width:100%; min-width:760px; border-collapse:collapse; }
+  .price-table.six { min-width:1100px; }
+  .price-table th { position:sticky; top:0; background:#17150d; color:#f6da78; font-size:12px; padding:13px 10px; border-bottom:1px solid #4b3e1f; text-align:center; }
+  .price-table th.service-col { text-align:left; min-width:225px; }
+  .price-table td { border-bottom:1px solid #232323; border-right:1px solid #1c1c1c; padding:12px 10px; text-align:center; white-space:nowrap; font-weight:800; font-size:13px; }
+  .price-table tr:hover td { background:#10100e; }
+  .price-table .service-name { text-align:left; white-space:normal; }
+  .service-name strong,.service-name span { display:block; }
+  .service-name span { margin-top:3px; color:#8e959d; font-size:11px; font-weight:700; }
+  .brand-card { display:flex; justify-content:space-between; gap:18px; align-items:center; border:1px solid #4c3b15; background:linear-gradient(135deg,#161103,#0b0b0b); border-radius:16px; padding:20px; margin-bottom:16px; }
+  .mini-kicker { color:#f7d85b; font-weight:1000; font-size:11px; letter-spacing:1.4px; }
+  .brand-card h3 { margin:7px 0; font-size:20px; }
+  .brand-card p { margin:0; color:#a7a7a7; font-size:12px; line-height:1.6; }
+  .warranty { min-width:130px; text-align:center; color:#111; background:#efd154; border-radius:12px; padding:14px; font-size:22px; font-weight:1000; }
+  .warranty span { display:block; margin-top:4px; font-size:10px; }
+  .three-cards { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin:16px 0 30px; }
+  .price-card { min-height:128px; display:flex; flex-direction:column; justify-content:space-between; gap:12px; padding:18px; border-radius:14px; background:linear-gradient(180deg,#f9df78,#c99a25); color:#090909; }
+  .price-card span { font-weight:900; font-size:14px; }
+  .price-card strong { font-size:clamp(24px,3vw,36px); letter-spacing:-1px; }
+  .subhead { margin:36px 0 14px; font-size:22px; color:#f6dc7b; }
+  .alert { margin-top:14px; padding:13px 16px; border-radius:10px; border:1px solid #4a7d27; background:#0a1a0b; color:#82ff76; font-weight:900; font-size:12px; text-align:center; }
+  .alert.red { border-color:#8c1d1d; background:#260909; color:#ff6c6c; }
+  .spec-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+  .spec-card { border:1px solid #3d331c; background:#0c0c0b; border-radius:15px; overflow:hidden; }
+  .spec-head { padding:16px; background:linear-gradient(90deg,#182d14,#0e0e0e); border-bottom:1px solid #2d4e28; }
+  .spec-head strong,.spec-head span { display:block; }
+  .spec-head strong { color:#f3d65d; font-size:28px; }
+  .spec-head span { margin-top:3px; color:#c7c7c7; font-size:12px; }
+  .spec-stats { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:1px; background:#242424; }
+  .stat { padding:12px 8px; background:#0e0e0e; text-align:center; }
+  .stat span { display:block; min-height:25px; color:#7f878d; font-size:8px; font-weight:1000; }
+  .stat strong { color:#fff0a8; font-size:16px; }
+  .spec-use { margin:0; padding:12px 16px; color:#cacaca; font-size:12px; }
+  .spec-warning { margin:0 16px 16px; padding:8px; color:#ff6d6d; border:1px solid #6e2323; border-radius:8px; font-size:11px; font-weight:900; text-align:center; }
+  .privacy-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+  .privacy-card { display:flex; gap:16px; align-items:center; padding:16px; background:#0d0d0d; border:1px solid #314a2d; border-radius:14px; }
+  .privacy-number { min-width:92px; color:#56ec5c; font-size:42px; font-weight:1000; line-height:1; }
+  .privacy-card strong,.privacy-card span { display:block; }
+  .privacy-card strong { color:#fff; font-size:17px; }
+  .privacy-card span { color:#bcbcbc; font-size:12px; margin-top:3px; }
+  .privacy-card p { color:#8d959b; font-size:11px; margin:7px 0 0; }
+  .booking-section { border-top:1px solid #1f1f1f; }
+  .booking-status { padding:14px 16px; border:1px solid #343434; border-radius:12px; color:#bbb; background:#0d0d0d; }
+  .booking-status.warning { border-color:#725d22; color:#f0d67e; }
+  .booking-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-top:16px; }
+  .booking-card { appearance:none; text-align:left; border:1px solid #2c2c2c; background:#0d0d0d; color:#fff; border-radius:14px; padding:16px; cursor:pointer; }
+  .booking-card:hover { border-color:#8f762c; background:#12110d; }
+  .booking-category { display:inline-block; color:#d7b84d; font-size:10px; font-weight:1000; text-transform:uppercase; letter-spacing:1px; margin-bottom:10px; }
+  .booking-card strong,.booking-card small { display:block; }
+  .booking-card strong { font-size:17px; }
+  .booking-card small { margin-top:5px; color:#8d949a; font-size:11px; }
+  .booking-action { display:block; margin-top:16px; color:#60ed69; font-size:12px; font-weight:1000; }
+  .poster-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }
+  .poster-card { appearance:none; padding:0; overflow:hidden; border-radius:14px; border:1px solid #252525; background:#0d0d0d; color:#fff; cursor:pointer; text-align:left; }
+  .poster-card:hover { transform:translateY(-2px); border-color:#766126; }
+  .poster-card img { width:100%; display:block; aspect-ratio:4/5; object-fit:cover; object-position:top; background:#111; }
+  .poster-card span { display:block; padding:11px 12px; font-size:11px; font-weight:800; color:#d5d5d5; }
+  .contact-section { margin-top:36px; padding:36px; border:1px solid #3a311b; border-radius:20px; background:linear-gradient(135deg,#111,#0c0d08); }
+  .contact-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .bottom-actions { margin-top:18px; }
+  .footer { padding:24px 16px; border-top:1px solid #292929; color:#7f858b; text-align:center; font-size:11px; }
+  .viewer { position:fixed; inset:0; z-index:1000; display:grid; place-items:center; background:rgba(0,0,0,.92); padding:20px; }
+  .viewer-inner { width:min(92vw,920px); height:90vh; display:flex; flex-direction:column; gap:10px; align-items:center; }
+  .viewer-inner img { max-width:100%; max-height:calc(90vh - 40px); object-fit:contain; border-radius:8px; box-shadow:0 20px 70px rgba(0,0,0,.7); }
+  .viewer-inner div { color:#ddd; font-size:12px; }
+  .viewer-close { position:fixed; top:15px; right:18px; width:44px; height:44px; border-radius:50%; border:1px solid #555; background:#111; color:#fff; font-size:26px; cursor:pointer; }
+  @media (max-width: 900px) {
+    .quick-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .booking-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .spec-grid,.privacy-grid { grid-template-columns:1fr; }
+    .poster-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .contact-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .spec-stats { grid-template-columns:repeat(3,minmax(0,1fr)); }
   }
-}
-
-const page = {
-  minHeight: "100vh",
-  background: "#f3f4f6",
-};
-
-
-const content = {
-  maxWidth: 1200,
-  margin: "0 auto",
-  padding: "32px 24px",
-};
-
-const headingRow = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 20,
-  marginTop: 22,
-};
-
-const eyebrow = {
-  margin: 0,
-  color: "#2563eb",
-  fontSize: 11,
-  fontWeight: 900,
-  letterSpacing: "1.5px",
-};
-
-const mainTitle = {
-  margin: "7px 0 0",
-  color: "#111827",
-  fontSize: 38,
-  lineHeight: 1.15,
-};
-
-const mainDescription = {
-  margin: "10px 0 0",
-  color: "#64748b",
-  lineHeight: 1.7,
-};
-
-const totalBadge = {
-  padding: "10px 15px",
-  borderRadius: 999,
-  background: "#111827",
-  color: "#ffffff",
-  fontSize: 13,
-  fontWeight: 900,
-  whiteSpace: "nowrap" as const,
-};
-
-const vehicleSelectorPanel = {
-  marginTop: 25,
-  padding: 24,
-  border: "1px solid #bfdbfe",
-  borderRadius: 24,
-  background:
-    "linear-gradient(145deg,#ffffff 0%,#f8fbff 55%,#eff6ff 100%)",
-  boxShadow:
-    "0 18px 45px rgba(37,99,235,.10)",
-};
-
-const vehicleSelectorHeader = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  flexWrap: "wrap" as const,
-  gap: 18,
-};
-
-const vehicleSelectorEyebrow = {
-  margin: 0,
-  color: "#2563eb",
-  fontSize: 10,
-  fontWeight: 950,
-  letterSpacing: "1.5px",
-};
-
-const vehicleSelectorTitle = {
-  margin: "7px 0 0",
-  color: "#0f172a",
-  fontSize: 25,
-  lineHeight: 1.25,
-};
-
-const vehicleSelectorDescription = {
-  margin: "8px 0 0",
-  color: "#64748b",
-  fontSize: 13,
-  lineHeight: 1.65,
-};
-
-const selectedVehicleBadge = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 11,
-  minWidth: 220,
-  padding: "12px 15px",
-  border: "1px solid #bfdbfe",
-  borderRadius: 16,
-  background: "#ffffff",
-  color: "#64748b",
-  fontSize: 11,
-  fontWeight: 750,
-  boxShadow:
-    "0 10px 24px rgba(37,99,235,.08)",
-};
-
-const selectedVehicleBadgeIcon = {
-  fontSize: 31,
-};
-
-const selectedVehicleBadgeName = {
-  display: "block",
-  marginTop: 3,
-  color: "#1d4ed8",
-  fontSize: 13,
-};
-
-const vehicleSizeGrid = {
-  display: "grid",
-  gridTemplateColumns:
-    "repeat(4, minmax(0, 1fr))",
-  gap: 12,
-  marginTop: 22,
-};
-
-const vehicleSizeButton = {
-  width: "100%",
-  minHeight: 116,
-  position: "relative" as const,
-  display: "flex",
-  alignItems: "center",
-  gap: 12,
-  padding: "16px 42px 16px 15px",
-  border: "2px solid",
-  borderRadius: 18,
-  cursor: "pointer",
-  textAlign: "left" as const,
-  transition:
-    "transform .18s ease, box-shadow .18s ease, border-color .18s ease",
-};
-
-const vehicleSizeIcon = {
-  flexShrink: 0,
-  fontSize: 34,
-};
-
-const vehicleSizeText = {
-  minWidth: 0,
-  display: "flex",
-  flexDirection: "column" as const,
-  gap: 2,
-};
-
-const vehicleSizeName = {
-  color: "#0f172a",
-  fontSize: 15,
-};
-
-const vehicleSizeEnglish = {
-  color: "#2563eb",
-  fontSize: 11,
-  fontWeight: 850,
-};
-
-const vehicleSizeDescription = {
-  marginTop: 4,
-  color: "#94a3b8",
-  fontSize: 9,
-  lineHeight: 1.4,
-};
-
-const vehicleSizeCheck = {
-  position: "absolute" as const,
-  top: 12,
-  right: 12,
-  width: 24,
-  height: 24,
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  borderRadius: "50%",
-  fontSize: 13,
-  fontWeight: 950,
-};
-
-const vehiclePriceNotice = {
-  marginTop: 16,
-  display: "flex",
-  alignItems: "center",
-  gap: 8,
-  padding: "11px 13px",
-  borderRadius: 13,
-  background: "#eff6ff",
-  color: "#475569",
-  fontSize: 12,
-  lineHeight: 1.5,
-};
-
-const vehiclePriceNoticeStrong = {
-  margin: "0 4px",
-  color: "#1d4ed8",
-};
-
-const searchPanel = {
-  marginTop: 25,
-  padding: 22,
-  border: "1px solid #e2e8f0",
-  borderRadius: 22,
-  background: "#ffffff",
-  boxShadow:
-    "0 15px 40px rgba(15,23,42,.08)",
-};
-
-const searchForm = {
-  display: "flex",
-  gap: 12,
-};
-
-const searchInputWrapper = {
-  position: "relative" as const,
-  flex: 1,
-  minWidth: 0,
-};
-
-const searchIcon = {
-  position: "absolute" as const,
-  top: "50%",
-  left: 17,
-  transform: "translateY(-50%)",
-  fontSize: 18,
-  pointerEvents: "none" as const,
-};
-
-const searchInput = {
-  width: "100%",
-  boxSizing: "border-box" as const,
-  padding: "15px 48px",
-  border: "1px solid #cbd5e1",
-  borderRadius: 15,
-  outline: "none",
-  background: "#f8fafc",
-  color: "#111827",
-  fontSize: 15,
-};
-
-const clearButton = {
-  position: "absolute" as const,
-  top: "50%",
-  right: 14,
-  width: 28,
-  height: 28,
-  transform: "translateY(-50%)",
-  border: "none",
-  borderRadius: 999,
-  background: "#e2e8f0",
-  color: "#475569",
-  cursor: "pointer",
-  fontSize: 18,
-};
-
-const searchButton = {
-  minWidth: 150,
-  padding: "14px 22px",
-  border: "none",
-  borderRadius: 15,
-  background:
-    "linear-gradient(135deg,#2563eb,#1d4ed8)",
-  color: "#ffffff",
-  cursor: "pointer",
-  fontSize: 14,
-  fontWeight: 900,
-  boxShadow:
-    "0 9px 20px rgba(37,99,235,.22)",
-};
-
-const filterHeader = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  flexWrap: "wrap" as const,
-  gap: 14,
-  marginTop: 22,
-  paddingTop: 20,
-  borderTop: "1px solid #e2e8f0",
-};
-
-const filterTitle = {
-  color: "#111827",
-  fontSize: 16,
-};
-
-const filterDescription = {
-  margin: "4px 0 0",
-  color: "#94a3b8",
-  fontSize: 12,
-};
-
-const resultBadge = {
-  padding: "7px 11px",
-  borderRadius: 999,
-  background: "#ecfdf5",
-  color: "#15803d",
-  fontSize: 11,
-  fontWeight: 900,
-};
-
-const viewTabs = {
-  display: "flex",
-  flexWrap: "wrap" as const,
-  gap: 10,
-  marginTop: 16,
-};
-
-const filterButton = {
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 7,
-  padding: "10px 15px",
-  border: "1px solid",
-  borderRadius: 12,
-  cursor: "pointer",
-  fontSize: 13,
-  fontWeight: 850,
-};
-
-const categoryArea = {
-  marginTop: 18,
-};
-
-const categoryLabel = {
-  display: "block",
-  marginBottom: 9,
-  color: "#64748b",
-  fontSize: 12,
-  fontWeight: 800,
-};
-
-const categoryButtons = {
-  display: "flex",
-  flexWrap: "wrap" as const,
-  gap: 8,
-};
-
-const categoryButton = {
-  padding: "8px 12px",
-  border: "1px solid",
-  borderRadius: 999,
-  cursor: "pointer",
-  fontSize: 12,
-  fontWeight: 800,
-};
-
-const loadingBox = {
-  marginTop: 30,
-  padding: 35,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 12,
-  borderRadius: 18,
-  background: "#ffffff",
-  color: "#334155",
-};
-
-const loadingIcon = {
-  fontSize: 28,
-};
-
-const errorBox = {
-  marginTop: 30,
-  padding: 25,
-  display: "flex",
-  gap: 16,
-  border: "1px solid #fecaca",
-  borderRadius: 18,
-  background: "#fef2f2",
-  color: "#991b1b",
-};
-
-const messageText = {
-  margin: "7px 0 0",
-};
-
-const retryButton = {
-  marginTop: 12,
-  padding: "9px 14px",
-  border: "none",
-  borderRadius: 10,
-  background: "#dc2626",
-  color: "#ffffff",
-  cursor: "pointer",
-  fontWeight: 800,
-};
-
-const emptyBox = {
-  marginTop: 30,
-  padding: "60px 25px",
-  textAlign: "center" as const,
-  border: "1px dashed #cbd5e1",
-  borderRadius: 22,
-  background: "#ffffff",
-};
-
-const emptyIcon = {
-  fontSize: 52,
-};
-
-const emptyTitle = {
-  margin: "15px 0 0",
-  color: "#111827",
-};
-
-const emptyDescription = {
-  margin: "8px 0 0",
-  color: "#64748b",
-};
-
-const resetButton = {
-  marginTop: 18,
-  padding: "11px 17px",
-  border: "none",
-  borderRadius: 12,
-  background: "#2563eb",
-  color: "#ffffff",
-  cursor: "pointer",
-  fontWeight: 850,
-};
-
-const resultSection = {
-  marginTop: 42,
-};
-
-const sectionHeading = {
-  display: "flex",
-  alignItems: "flex-end",
-  justifyContent: "space-between",
-  flexWrap: "wrap" as const,
-  gap: 15,
-  marginBottom: 20,
-};
-
-const sectionEyebrow = {
-  margin: 0,
-  color: "#2563eb",
-  fontSize: 10,
-  fontWeight: 900,
-  letterSpacing: "1.3px",
-};
-
-const sectionTitle = {
-  margin: "6px 0 0",
-  color: "#111827",
-  fontSize: 30,
-};
-
-const sectionDescription = {
-  margin: "7px 0 0",
-  color: "#64748b",
-};
-
-const sectionCount = {
-  padding: "7px 11px",
-  borderRadius: 999,
-  background: "#e0e7ff",
-  color: "#4338ca",
-  fontSize: 11,
-  fontWeight: 900,
-};
-
-const packageGrid = {
-  display: "grid",
-  gridTemplateColumns:
-    "repeat(auto-fill,minmax(300px,1fr))",
-  gap: 24,
-  marginBottom: 50,
-};
-const floatingActions = {
-  position: "fixed" as const,
-  right: 18,
-  bottom: 20,
-  zIndex: 900,
-  display: "flex",
-  flexDirection: "column" as const,
-  alignItems: "flex-end",
-  gap: 10,
-};
-
-const floatingButtonBase = {
-  minHeight: 46,
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 7,
-  padding: "0 15px",
-  border: "none",
-  borderRadius: 999,
-  color: "#ffffff",
-  cursor: "pointer",
-  textDecoration: "none",
-  fontSize: 17,
-  fontWeight: 900,
-  boxShadow: "0 12px 28px rgba(15,23,42,.24)",
-};
-
-const floatingPrimaryButton = {
-  ...floatingButtonBase,
-  background: "linear-gradient(135deg,#16a34a,#15803d)",
-};
-
-const floatingWeChatButton = {
-  ...floatingButtonBase,
-  background: "linear-gradient(135deg,#22c55e,#07c160)",
-};
-
-const floatingTelegramButton = {
-  ...floatingButtonBase,
-  background: "linear-gradient(135deg,#38bdf8,#229ed9)",
-};
-
-const floatingEmailButton = {
-  ...floatingButtonBase,
-  background: "linear-gradient(135deg,#8b5cf6,#6d28d9)",
-};
-
-const floatingTopButton = {
-  width: 46,
-  height: 46,
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  border: "none",
-  borderRadius: "50%",
-  background: "#111827",
-  color: "#ffffff",
-  cursor: "pointer",
-  fontSize: 22,
-  fontWeight: 900,
-  boxShadow: "0 12px 28px rgba(15,23,42,.24)",
-};
-
-const floatingButtonText = {
-  fontSize: 12,
-  whiteSpace: "nowrap" as const,
-};
-export default CustomerMenu;
+  @media (max-width: 640px) {
+    .hero-inner { padding-top:26px; }
+    .brand-line { flex-direction:column; }
+    .location-badge { align-self:flex-start; }
+    .hero-actions .btn { flex:1 1 100%; }
+    .quick-grid,.three-cards,.contact-grid,.poster-grid,.booking-grid { grid-template-columns:1fr; }
+    .section { padding-top:44px; }
+    .content { padding-left:14px; padding-right:14px; }
+    .brand-card { flex-direction:column; align-items:stretch; }
+    .warranty { width:100%; }
+    .privacy-number { min-width:80px; font-size:36px; }
+    .contact-section { padding:24px 16px; }
+  }
+`;
