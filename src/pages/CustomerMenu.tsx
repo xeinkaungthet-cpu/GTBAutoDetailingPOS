@@ -189,13 +189,13 @@ export default function CustomerMenu() {
       </header>
 
       <nav className="jump-nav">
-        <a href="#detailing">汽车美容价格</a>
-        <a href="#lujie">路界隔热膜</a>
-        <a href="#nano">纳米陶瓷膜</a>
-        <a href="#booking">在线预约</a>
-        <a href="#posters">完整海报</a>
-        <a href="#contact">联系门店</a>
-      </nav>
+  <a href="#detailing">汽车美容价格 / Detailing Prices</a>
+  <a href="#lujie">路界隔热膜 / Lu Jie Window Film</a>
+  <a href="#nano">纳米陶瓷膜 / Nano Ceramic Film</a>
+  <a href="#booking">在线预约 / Book Online</a>
+  <a href="#posters">完整海报 / Full Menu Posters</a>
+  <a href="#contact">联系门店 / Contact Us</a>
+</nav>
 
       <main className="content">
         <section id="detailing" className="section">
