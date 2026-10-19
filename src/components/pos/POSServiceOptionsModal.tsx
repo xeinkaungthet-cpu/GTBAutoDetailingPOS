@@ -156,11 +156,12 @@ export default function POSServiceOptionsModal({
     activeCoatingOptions.find((option) => option.id === coatingOptionId) ?? null;
 
   const vehicleDifference = vehiclePrice - smallPrice;
-  const finalPrice = roundMoney(
-    selectedCoatingOption
-      ? Math.max(0, toMoney(selectedCoatingOption.price) + vehicleDifference)
-      : vehiclePrice,
-  );
+const finalPrice = selectedCoatingOption
+  ? Math.max(
+      0,
+      toMoney(selectedCoatingOption.price) + vehicleDifference
+    )
+  : vehiclePrice;
 
   const hasCoatingOptions = activeCoatingOptions.length > 0;
   const canConfirm =
